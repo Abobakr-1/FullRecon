@@ -1,0 +1,81 @@
+==============================================================================
+ FullRecon summary - scanme.nmap.org
+==============================================================================
+
+ Tool version   : 1.0.0
+ Started (UTC)  : 2026-11-19T16:19:29Z
+ Finished (UTC) : 2026-11-19T16:22:09Z
+ Duration       : 2m 40s
+ Results dir    : C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org
+
+------------------------------------------------------------------------------
+ Statistics
+------------------------------------------------------------------------------
+ Subdomains found        : 3
+ Subdomains resolving    : 1
+ DNS records             : 2
+ Live hosts              : 1
+ Open ports              : 2
+ Technologies            : 2
+ URLs                    : 42
+ API endpoints           : 0
+ JavaScript files        : 3
+ Potential JS secrets    : 0
+ Content paths           : 4
+ Intelligence findings   : 7
+
+------------------------------------------------------------------------------
+ Findings by severity
+------------------------------------------------------------------------------
+ HIGH: 0   MEDIUM: 4   LOW: 3   INFO: 0
+
+------------------------------------------------------------------------------
+ Top findings
+------------------------------------------------------------------------------
+ [MEDIUM] 2 endpoint(s) served over plain HTTP
+          Cleartext HTTP exposes cookies, tokens and session data to network attackers.
+          - http://scanme.nmap.org/
+          - http://scanme.nmap.org:80/
+ [MEDIUM] 1 administrative service(s) exposed
+          Management and file-sharing services reachable from the internet expand the attack surface. Expected on many servers, but worth inventorying and ch...
+          - scanme.nmap.org:22 ssh
+ [MEDIUM] 1 non-web TCP service(s) exposed
+          Non-HTTP services reachable from the internet expand the attack surface (exposed admin planes, databases, remote access).
+          - scanme.nmap.org:22 ssh
+ [MEDIUM] 10 interesting URL(s) collected
+          URLs matching sensitive keywords/extensions or carrying query parameters are prime candidates for manual review.
+          - http://scanme.nmap.org/shared/css/insecdb.css
+          - http://scanme.nmap.org/shared/css/nst-foot.css?v=2
+          - http://scanme.nmap.org/shared/css/nst.css?v=2
+ [LOW   ] 2 interesting path(s) discovered
+          Paths that are accessible and worth a manual look.
+          - http://scanme.nmap.org/.svn
+          - http://scanme.nmap.org:80/.svn
+ [LOW   ] 2 subdomain(s) do not resolve
+          Unresolving names may be stale DNS entries. Combined with a third-party CNAME they become takeover candidates.
+          - nmap.scanme.nmap.org
+          - www.scanme.nmap.org
+ [LOW   ] 1 technology version(s) disclosed
+          Banner/version disclosure helps attackers target known CVEs. Version numbers here come from public responses only.
+          - Apache 2.4.7
+
+------------------------------------------------------------------------------
+ Module status
+------------------------------------------------------------------------------
+ subdomains         ok          38.3s  unique=3, resolved=1, unresolved=2, wildcard=False
+ dns                ok          612ms  hosts=1, records=2, dangling=0
+ ports              ok           2.1s  open_ports=2, hosts=1
+ live               ok           6.3s  live_hosts=1, endpoints=2
+ technologies       ok          439ms  technologies=2, hosts=2
+ urls               ok          31.8s  urls=42, interesting=10
+ javascript         ok          497ms  js_files=3, endpoints=0, secrets=0, high_confidence=0
+ api                ok          12.8s  api_endpoints=0, graphql=0, swagger=0, parameters=2
+ content            ok          1m 7s  paths=4, interesting=2
+ intel              ok            7ms  findings=7, high=0, medium=4
+
+------------------------------------------------------------------------------
+ Reminder
+------------------------------------------------------------------------------
+ These results are reconnaissance data, not confirmed vulnerabilities.
+ Verify every finding manually and report only through the program's
+ official channel. Never test credentials discovered in JavaScript.

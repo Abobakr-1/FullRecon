@@ -1,0 +1,5 @@
+# FullRecon runtime dependencies
+# dnspython powers fast, resolver-controlled DNS lookups. Everything else uses
+# the Python standard library, so FullRecon still starts without it (with a
+# reduced DNS fallback).
+dnspython>=2.4.0

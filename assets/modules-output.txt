@@ -1,0 +1,24 @@
+
+Available modules
+
+  subdomains     Subdomain Enumeration        passive-safe
+  dns            DNS Enumeration              passive-safe
+  ports          Port Scanning                active
+  live           Live Host Discovery          active
+  technologies   Technology Detection         active
+  urls           URL & Endpoint Discovery     active
+  javascript     JavaScript Analysis          active
+  api            API Discovery                active
+  content        Directory & Content Discovery active
+  intel          Reconnaissance Intelligence  passive-safe
+
+Groups:
+  full           subdomains, dns, ports, live, technologies, urls, javascript, api, content, intel
+  default        subdomains, dns, ports, live, technologies, urls, javascript, api, content, intel
+  passive        subdomains, dns, intel
+  active         ports, live, technologies, urls, javascript, api, content, intel
+  subdomains     subdomains
+  ports          ports
+  api            api
+  js             javascript
+

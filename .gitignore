@@ -1,0 +1,45 @@
+# --- results and scan artefacts ---
+FullRecon-Results/
+results/
+*.log
+!config/*.json
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- editors / OS ---
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# --- local scope and target lists (never publish your targets) ---
+scope.txt
+scope.local.txt
+targets.txt
+targets/
+config/local.json
+
+# --- secrets ---
+.env
+.env.*
+*.pem
+*.key
+credentials*

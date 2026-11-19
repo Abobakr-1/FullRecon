@@ -1,0 +1,97 @@
+usage: fullrecon [-h] [-V] [-d DOMAIN] [-o DIR] [--timestamped] [--overwrite]
+                 [--full] [--passive] [--active] [--subdomains] [--dns]
+                 [--ports] [--live] [--urls] [--api] [--js] [--content]
+                 [--tech] [-t N] [--rate-limit RPS] [--timeout SEC]
+                 [--retries N] [--proxy URL] [--ports-list LIST]
+                 [--top-ports N] [--no-nmap] [--no-resolve] [--no-crawl]
+                 [--no-archives] [--no-content] [--crawl-depth N]
+                 [--max-pages N] [--wordlist FILE] [--subdomain-wordlist FILE]
+                 [--bruteforce] [--sources LIST] [--verify-tls]
+                 [--scope-file FILE] [--in-scope LIST] [--out-of-scope LIST]
+                 [--allowed-ports LIST] [-c FILE] [-v] [-q] [--no-color]
+                 [--yes] [--authorized] [--list-modules]
+
+FullRecon - automated reconnaissance framework for authorized testing.
+
+options:
+  -h, --help            show this help message and exit
+  -V, --version         show program's version number and exit
+
+target:
+  -d, --domain DOMAIN   target domain, e.g. example.com (required for scans)
+  -o, --output DIR      results directory (default: FullRecon-Results)
+  --timestamped         write results into a timestamped subfolder
+  --overwrite           replace an existing result directory without asking
+
+scan modes:
+  --full                run every module including content discovery
+  --passive             passive reconnaissance only (no traffic to the target)
+  --active              active reconnaissance only (skip passive enumeration)
+
+single-module shortcuts:
+  --subdomains          subdomain enumeration only
+  --dns                 DNS enumeration only
+  --ports               port scanning only
+  --live                live host discovery only
+  --urls                URL discovery only
+  --api                 API discovery only
+  --js                  JavaScript analysis only
+  --content             content discovery only
+  --tech                technology detection only
+
+performance:
+  -t, --threads N       worker threads (default: 15)
+  --rate-limit RPS      max requests per second per host (default: 20)
+  --timeout SEC         per-request timeout in seconds (default: 10)
+  --retries N           retries per failed request (default: 1)
+  --proxy URL           HTTP(S) proxy, e.g. http://127.0.0.1:8080
+
+scanning options:
+  --ports-list LIST     comma separated ports or ranges, e.g. 80,443,8000-8100
+  --top-ports N         scan the N most common ports
+  --no-nmap             never use nmap, always use the built-in TCP scanner
+  --no-resolve          skip DNS validation of discovered subdomains
+  --no-crawl            disable web crawling
+  --no-archives         disable Wayback/Common Crawl lookups
+  --no-content          disable content discovery in the full pipeline
+  --crawl-depth N       crawl depth (default: 2)
+  --max-pages N         maximum pages to crawl per scan (default: 200)
+  --wordlist FILE       wordlist for content discovery
+  --subdomain-wordlist FILE
+                        wordlist for subdomain brute force (needs
+                        --bruteforce)
+  --bruteforce          also brute-force subdomains using --subdomain-wordlist
+  --sources LIST        comma separated passive sources (crtsh,certspotter,hac
+                        kertarget,subdomain_center,urlscan,rapiddns,otx,waybac
+                        k,commoncrawl,anubis)
+  --verify-tls          require valid TLS certificates (off by default for
+                        recon)
+
+scope control:
+  --scope-file FILE     file with in-scope hosts/domains/CIDRs (one per line,
+                        ! to exclude)
+  --in-scope LIST       comma separated extra in-scope domains/CIDRs
+  --out-of-scope LIST   comma separated domains/CIDRs to never touch
+  --allowed-ports LIST  restrict every module to these ports (comma separated)
+
+general:
+  -c, --config FILE     JSON config file (see config/fullrecon.example.json)
+  -v, --verbose         verbose output
+  -q, --quiet           minimal output
+  --no-color            disable coloured output
+  --yes                 assume yes for overwrite prompts (non-interactive
+                        runs)
+  --authorized          confirm you are authorised to test this target
+                        (required in non-interactive environments)
+  --list-modules        list available modules and exit
+
+examples:
+  fullrecon -d example.com                      standard recon pipeline
+  fullrecon -d example.com --full               every module, incl. content discovery
+  fullrecon -d example.com --passive            passive sources + DNS only
+  fullrecon -d example.com --active             skip passive enumeration
+  fullrecon -d example.com --subdomains         subdomain enumeration only
+  fullrecon -d example.com --ports --threads 40 targeted port scan
+  fullrecon -d example.com --api --js           API + JavaScript analysis
+  fullrecon -d example.com -o /tmp/results      custom output directory
+  fullrecon -d example.com --scope-file scope.txt

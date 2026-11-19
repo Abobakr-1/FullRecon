@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fullrecon"
+version = "1.0.0"
+description = "FullRecon - automated reconnaissance framework for authorized bug bounty and penetration testing"
+readme = "README.md"
+requires-python = ">=3.8"
+license = {text = "MIT"}
+authors = [{name = "Abobakr Mohamed"}]
+maintainers = [{name = "Abobakr Mohamed", email = "abobakr@users.noreply.github.com"}]
+keywords = ["recon", "bugbounty", "security", "subdomains", "osint", "pentest"]
+classifiers = [
+  "Environment :: Console",
+  "Intended Audience :: Information Technology",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+  "Operating System :: Microsoft :: Windows",
+  "Programming Language :: Python :: 3",
+  "Topic :: Security",
+]
+dependencies = ["dnspython>=2.4.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.urls]
+Homepage = "https://github.com/Abobakr-1/FullRecon"
+Repository = "https://github.com/Abobakr-1/FullRecon"
+Issues = "https://github.com/Abobakr-1/FullRecon/issues"
+
+[project.scripts]
+fullrecon = "fullrecon.cli:entrypoint"
+
+[tool.setuptools]
+packages = [
+  "fullrecon",
+  "fullrecon.core",
+  "fullrecon.modules",
+  "fullrecon.utils",
+]
+
+[tool.setuptools.package-data]
+fullrecon = ["data/*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore::DeprecationWarning"]

@@ -1,0 +1,103 @@
+ target : scanme.nmap.org
+ output : C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org
+ mode   : active | threads 30 | rate 40/s | timeout 10s
+ modules: subdomains, dns, ports, live, technologies, urls, javascript, api, content, intel
+
+
+────────────────────────────────────────────────────────────────
+ [1/10] Subdomain Enumeration
+────────────────────────────────────────────────────────────────
+18:19:29 INF [fullrecon] Querying 9 passive source(s) in parallel
+18:19:29 INF [fullrecon]   otx                  - (no data)
+18:19:29 INF [fullrecon]   subdomain_center     2 hostnames
+18:19:29 INF [fullrecon]   certspotter          - (no data)
+18:19:29 INF [fullrecon]   hackertarget         1 hostnames
+18:19:29 INF [fullrecon]   rapiddns             - (no data)
+18:19:30 INF [fullrecon]   urlscan              1 hostnames
+18:19:37 INF [fullrecon]   crtsh                - (no data)
+18:19:39 INF [fullrecon]   commoncrawl          - (no data)
+18:20:06 INF [fullrecon]   wayback              2 hostnames
+18:20:07 INF [fullrecon] Subdomains: 3 unique, 1 resolve, 2 unresolved
+
+────────────────────────────────────────────────────────────────
+ [2/10] DNS Enumeration
+────────────────────────────────────────────────────────────────
+18:20:07 INF [fullrecon] Enumerating DNS records for 1 host(s)
+18:20:07 INF [fullrecon] DNS: 1 hosts, 2 records, 0 dangling CNAME(s)
+
+────────────────────────────────────────────────────────────────
+ [3/10] Port Scanning
+────────────────────────────────────────────────────────────────
+18:20:07 INF [fullrecon] Scanning 1 host(s) x 20 port(s) (nmap service detection)
+18:20:09 INF [fullrecon]   scanme.nmap.org                          2 open: 22,80
+18:20:09 INF [fullrecon] Ports: 2 open port(s) across 1 host(s)
+18:20:09 WRN [fullrecon] 1 sensitive port(s) reachable (e.g. 22)
+
+────────────────────────────────────────────────────────────────
+ [4/10] Live Host Discovery
+────────────────────────────────────────────────────────────────
+18:20:09 INF [fullrecon] Probing 3 host/scheme combination(s)
+18:20:16 INF [fullrecon] Live hosts: 1 host(s), 2 endpoint(s) responding
+
+────────────────────────────────────────────────────────────────
+ [5/10] Technology Detection
+────────────────────────────────────────────────────────────────
+18:20:16 INF [fullrecon] Fingerprinting 2 endpoint(s)
+18:20:16 INF [fullrecon] Technologies: 2 unique across 2 host(s)
+
+────────────────────────────────────────────────────────────────
+ [6/10] URL & Endpoint Discovery
+────────────────────────────────────────────────────────────────
+18:20:16 INF [fullrecon] Crawling 2 seed(s), depth 2
+18:20:21 INF [fullrecon]   crawled 3 page(s), 1 JS reference(s)
+18:20:38 INF [fullrecon]   wayback: 32 URL(s)
+18:20:48 INF [fullrecon]   commoncrawl: 0 URL(s)
+18:20:48 INF [fullrecon] URLs: 42 unique, 10 interesting, 2 host(s)
+
+────────────────────────────────────────────────────────────────
+ [7/10] JavaScript Analysis
+────────────────────────────────────────────────────────────────
+18:20:48 INF [fullrecon] Analysing 3 JavaScript file(s)
+18:20:49 INF [fullrecon] JavaScript: 3 file(s), 0 endpoint(s), 0 secret pattern(s) (0 high confidence)
+
+────────────────────────────────────────────────────────────────
+ [8/10] API Discovery
+────────────────────────────────────────────────────────────────
+18:20:49 INF [fullrecon] Probing 2 base URL(s) for API surfaces
+18:21:01 INF [fullrecon] API: 0 endpoint(s), 0 GraphQL, 0 doc surface(s), 2 parameter(s)
+
+────────────────────────────────────────────────────────────────
+ [9/10] Directory & Content Discovery
+────────────────────────────────────────────────────────────────
+18:21:01 INF [fullrecon] Testing 1200 path(s) across 2 base URL(s) at 40 req/s per host
+18:22:09 INF [fullrecon] Content discovery: 4 path(s) found, 2 interesting
+
+────────────────────────────────────────────────────────────────
+ [10/10] Reconnaissance Intelligence
+────────────────────────────────────────────────────────────────
+18:22:09 INF [fullrecon] Intelligence: 7 finding(s) (0 high, 4 medium)
+18:22:09 OK  [fullrecon] reports written to C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org\10-Reports
+
+════════════════════════════════════════════════════════════════
+ SCAN COMPLETE
+════════════════════════════════════════════════════════════════
+  Duration            2m 40s
+  Subdomains          3
+  Resolved hosts      1
+  Live hosts          1
+  Open ports          2
+  Technologies        2
+  URLs                42
+  API endpoints       0
+  JS files / secrets  3 / 0
+  Content paths       4
+
+  findings: HIGH 0 | MEDIUM 4 | LOW 3 | INFO 0
+
+  results  C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org
+  summary  C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org\10-Reports\summary.txt
+  json     C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org\10-Reports\report.json
+  html     C:\Users\PC\AppData\Local\alphacode\builds\current\fullrecon\results\verify\scanme.nmap.org\10-Reports\report.html
+
+  Reconnaissance data only - verify findings manually.
+

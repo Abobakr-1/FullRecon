@@ -1,0 +1,45 @@
+{
+  "_comment": "Copy to ~/.config/fullrecon/config.json or pass with --config path.json",
+  "threads": 15,
+  "rate_limit": 20.0,
+  "timeout": 10.0,
+  "retries": 1,
+  "verify_tls": false,
+
+  "subdomain_sources": [
+    "crtsh",
+    "certspotter",
+    "hackertarget",
+    "subdomain_center",
+    "urlscan",
+    "rapiddns",
+    "otx",
+    "wayback",
+    "commoncrawl"
+  ],
+  "max_subdomains": 5000,
+
+  "dns_threads": 20,
+  "resolve_subdomains": true,
+
+  "ports": [21, 22, 25, 80, 443, 445, 1433, 3000, 3306, 3389, 5432, 6379, 8000, 8080, 8443, 9200, 27017],
+  "port_scan_timeout": 2.0,
+  "port_scan_threads": 100,
+  "use_nmap": true,
+  "nmap_service_detection": true,
+
+  "crawl_depth": 2,
+  "crawl_max_pages": 200,
+  "wayback_urls": true,
+  "commoncrawl_urls": true,
+
+  "js_max_files": 150,
+  "content_discovery": true,
+  "content_max_paths": 4000,
+
+  "scope": {
+    "in_scope": [],
+    "out_of_scope": [],
+    "allowed_ports": []
+  }
+}
