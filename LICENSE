@@ -19,17 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
---------------------------------------------------------------------------------
-ADDITIONAL NOTICE - AUTHORIZED USE ONLY
-
-FullRecon is a reconnaissance tool intended exclusively for authorized security
-testing: bug bounty programs, penetration tests with written permission, and
-your own infrastructure.
-
-Using this software against systems without explicit prior authorization may
-violate the law in your jurisdiction (for example the Computer Fraud and Abuse
-Act in the United States, or the Computer Misuse Act in the United Kingdom).
-The author assumes no liability for misuse or for damage caused by this
-software. You are solely responsible for complying with all applicable laws and
-with the rules of any bug bounty program you participate in.

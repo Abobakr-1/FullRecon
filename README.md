@@ -406,7 +406,7 @@ FullRecon is built for **authorized** testing only.
   reads third-party public datasets and public DNS.
 
 You are responsible for having permission and for following the program's rules.
-See [LICENSE](LICENSE) for the full notice.
+See [docs/AUTHORIZED-USE.md](docs/AUTHORIZED-USE.md) for the full notice.
 
 ---
 
@@ -474,7 +474,9 @@ wordlists/                   extra wordlists
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Includes an additional authorized-use notice.
+MIT — see [LICENSE](LICENSE). The license grants broad rights to the software
+but does not authorize access to any system; read
+[docs/AUTHORIZED-USE.md](docs/AUTHORIZED-USE.md) for the scope of permitted use.
 
 ## Disclaimer
 
