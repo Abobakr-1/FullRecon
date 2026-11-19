@@ -106,6 +106,19 @@ The installer:
 
 `sudo ./install.sh` performs a system-wide install.
 
+Tested on **Python 3.9, 3.13 and 3.14** on Linux and Windows. The test suite runs
+on every push via GitHub Actions against 3.9, 3.11 and 3.13.
+
+Linux users who prefer an isolated install without touching the system Python:
+
+```bash
+git clone https://github.com/Abobakr-1/FullRecon.git
+cd FullRecon
+./install.sh --venv
+source .venv/bin/activate      # or add .venv/bin to PATH
+fullrecon -d example.com
+```
+
 ### pip
 
 ```bash

@@ -135,15 +135,55 @@ the tool exits 0.
     attempts to install `python3-<ver>-venv` and retries, falling back to a clear
     message with two alternatives.
 
-## Cross-platform checks
+## Cross-platform and version checks
 
-| Check | Windows 11 | Ubuntu 26.04 |
-|---|---|---|
-| `pip install -e .` | pass | pass |
-| Console script on PATH | pass | pass (after PATH hint) |
-| `pytest -q` | 129 passed | not run (tests require no OS-specific code) |
-| Real scan | pass | pass |
-| Reports written | pass | pass |
+| Check | Python 3.9.25 | Python 3.13.2 | Python 3.14.10 |
+|---|---|---|---|
+| `pip install -e ".[dev]"` | pass | pass | pass |
+| `pytest -q` | 129 passed | 129 passed | 129 passed |
+| `fullrecon --version` | pass | pass | pass |
+| `fullrecon --list-modules` | pass | pass | pass |
+| Real scan + report files | pass | pass | pass |
+| OS | Windows 11 | Windows 11 | Windows 11 / Ubuntu 26.04 (WSL) |
+
+Python 3.9 is the floor stated in `pyproject.toml`; it was verified with a real
+3.9.25 interpreter (via `uv`), not inferred. Source is parsed with
+`ast.parse(..., feature_version=(3, 8))` to confirm the syntax floor, and every
+module using PEP 604 unions carries `from __future__ import annotations`.
+
+## Clean-clone install test (the commands users will actually type)
+
+```bash
+git clone https://github.com/Abobakr-1/FullRecon.git
+cd FullRecon
+chmod +x install.sh
+./install.sh --venv
+```
+
+Run in Ubuntu 26.04 against the public repository:
+
+```
+[+] python: Python 3.14.4 (/usr/bin/python3)
+[+] pip: pip 25.1.1
+[*] installing FullRecon into ./.venv
+[+] installed into /tmp/clonetest/.venv
+[+] verified: FullRecon 1.0.0 (https://github.com/Abobakr-1/FullRecon)
+[+] all modules load correctly
+```
+
+Then, from `/tmp` (a different directory than the clone):
+
+```
+$ fullrecon -d example.com --authorized --yes --subdomains
+ Duration            54.5s
+ Subdomains          453
+ Resolved hosts      2
+ results  /tmp/gh-test-out/example.com
+ exit=0
+```
+
+Reports were present: `summary.txt`, `report.json`, `report.html`, `manifest.json`.
+`git clone` also preserved the executable bit on `install.sh` (`-rwxr-xr-x`).
 
 ## Known limitations observed in testing
 
