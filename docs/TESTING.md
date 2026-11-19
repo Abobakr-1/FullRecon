@@ -7,8 +7,10 @@ development. Nothing here is estimated.
 
 ```
 $ pytest -q
-.............................................................  [100%]
-129 passed in 1.14s
+........................................................................ [ 46%]
+........................................................................ [ 92%]
+............                                                             [100%]
+156 passed in 4.06s
 ```
 
 | File | Tests | Covers |
@@ -18,6 +20,7 @@ $ pytest -q
 | `tests/test_helpers.py` | 28 | File I/O, de-duplication, URL normalisation, HTML/title/script/form/comment extraction, gzip + chunked HTTP decoding, rate limiter |
 | `tests/test_modules.py` | 16 | Subdomain source parsers (crt.sh, Cert Spotter, HackerTarget, subdomain.center), source-failure isolation, takeover fingerprints, DNS output files, technology detection, JavaScript secrets/endpoints/comments |
 | `tests/test_modules_extra.py` | 16 | URL crawling and de-duplication, API spec/GraphQL detection, soft-404 content filtering, nmap parsing, port merge, live-host de-duplication, intelligence scoring and severity ordering |
+| `tests/test_recon_additions.py` | 27 | External-tool adapter contract and missing-binary handling, RDAP parsing and IDNA keys, ASN/RIPE parsing, security-header scoring and CSP/HSTS weakness detection, WAF signatures and behavioural blocking (including a no-false-positive control), WordPress detection/regexes/enumeration and non-WordPress rejection |
 | `tests/test_cli.py` | 29 | Argument parsing, config assembly, output-manager overwrite policy, orchestrator end-to-end with stubs, module crash isolation, passive mode, authorization gate |
 
 The suite makes **no network requests**: modules are exercised with a fake HTTP
@@ -194,3 +197,84 @@ Reports were present: `summary.txt`, `report.json`, `report.html`, `manifest.jso
   optional.
 - Wildcard DNS detection did not trigger on the test domains, so the wildcard
   path is covered by unit tests rather than a live scan.
+
+## Recon & Mapping additions (v1.1)
+
+Five modules and an external-tool layer were added after the 1.0 release.
+Verification performed:
+
+**Offline tests** — 27 new tests in `tests/test_recon_additions.py`, all passing
+with no network access. The shared `make_ctx` helper now forces
+`use_external_tools=False`, so the suite can never shell out to a real recon
+binary. That was a genuine bug: the first run of the extended suite hung because
+the subdomains module invoked the installed `subfinder`.
+
+**Real scan (`example.com`, 15/15 modules)** — new directories populated with
+correct data:
+
+```
+11-ASN/asn_info.txt
+    AS13335    CLOUDFLARENET - Cloudflare, Inc.
+    prefix     172.0.0.0/8
+    prefix     104.0.0.0/8
+    address    172.66.147.243
+    address    104.20.23.154
+
+12-Headers/header_scores.txt
+    http://example.com/        0/7   7   0
+    https://example.com/       0/7   7   0
+
+13-WAF/waf_results.txt
+    http://example.com         DETECTED   Cloudflare
+    https://www.example.com    DETECTED   Cloudflare
+
+10-WHOIS/whois.txt
+    Registrar : RESERVED-Internet Assigned Numbers Authority
+    registration: 1995-08-14   expiration: 2027-08-13
+    nameservers: elliott.ns.cloudflare.com, hera.ns.cloudflare.com
+```
+
+Report summary counters confirmed:
+
+```
+ Announcing ASNs         : 1
+ Hosts behind WAF/CDN    : 4
+ WordPress sites         : 0
+```
+
+`WordPress sites: 0` with an empty `14-WordPress/` directory is the correct
+result for a non-WordPress target, not a failure.
+
+**Intelligence output** picked up the new analyses — HSTS-missing and
+version-disclosure findings appear at LOW, WAF context at INFO, and the
+per-endpoint header scores are summarised.
+
+**Clean-clone install (Ubuntu 26.04)** — cloned the pushed repository, ran
+`./install.sh --venv`, then from `/tmp`:
+
+```
+$ fullrecon --version
+FullRecon 1.0.0 (https://github.com/Abobakr-1/FullRecon)
+$ fullrecon --list-modules
+  whois          WHOIS / RDAP                 passive-safe
+  asn            ASN / Network Mapping        passive-safe
+  headers        Security Header Audit        active
+  waf            WAF / CDN Detection          active
+  wordpress      WordPress Enumeration        active
+```
+
+**Bugs found and fixed during this work**
+
+1. The extended test suite hung: `_external_sources` called the real
+   `subfinder` binary. Tests now disable external tools.
+2. `test_output_manager_creates_tree` and one CLI test hardcoded `10-Reports`,
+   which became `15-Reports`. Both now read `OUTPUT_DIRS`.
+3. The orchestrator test stubbed only the original 10 modules, letting new
+   modules hit the network. Stub list centralised in `ALL_MODULE_RUN_PATHS`.
+4. RDAP nameservers are normalised to lowercase; a test asserted uppercase.
+5. The WAF false-positive test used an out-of-scope host, so `_bases()` returned
+   nothing.
+6. `bgpview.io` is dead — the ASN module uses RIPE Stat instead, chosen after
+   testing four candidate APIs.
+7. The GitHub remote of the restored repository pointed at the local bundle
+   file, so `git push` silently targeted the bundle. Corrected to the GitHub URL.
