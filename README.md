@@ -427,8 +427,10 @@ pytest -q                  # 126 tests, no network required
 pytest -q -k scope         # just scope tests
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for architecture, module-adding steps and
-the review bar. Tests never touch the network: modules are exercised with a fake
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the review bar,
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for design details,
+[docs/OUTPUT.md](docs/OUTPUT.md) for the full output reference and
+[docs/TESTING.md](docs/TESTING.md) for real scan results. Tests never touch the network: modules are exercised with a fake
 HTTP client and HTML fixtures.
 
 ### Project layout
