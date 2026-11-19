@@ -170,16 +170,16 @@ class PortScanner:
 
     # ------------------------------------------------------------------
     def _nmap(self, host: str, addresses: List[str], ports: Sequence[int]) -> Optional[List[PortResult]]:
-        args = ["nmap", "-Pn", "--open", "-T4", "-p", ",".join(map(str, ports))]
-        if self.cfg.nmap_service_detection:
-            args += ["-sV", "--version-light", "--host-timeout", "300s"]
-        args += [host]
-        code, stdout, stderr = run_command(args, timeout=600)
-        if code != 0 or not stdout:
+        # Single implementation: the shared adapter in core/tools is the only
+        # place that invokes nmap, so both paths cannot drift apart.
+        from .tools import nmap_services
+
+        result = nmap_services([host], ports=ports, timeout=600)
+        if not result.ok or not result.raw:
             if self.log:
-                self.log.debug("nmap failed (%s): %s", code, (stderr or "").strip()[:200])
+                self.log.debug("nmap failed: %s", result.error or result.skipped_reason)
             return None
-        results = self._parse_nmap(stdout)
+        results = self._parse_nmap(result.raw)
         if results:
             # nmap prints one section per address it reached (hostname and/or
             # IP).  Results belong to the hostname we asked about, and the same

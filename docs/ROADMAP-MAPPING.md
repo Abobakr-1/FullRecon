@@ -36,7 +36,7 @@ implemented, with the reason.
 | `httpx -tech-detect` | adapter | httpx adapter returns a `tech` array, merged into live-host records |
 | `whatweb -i live.txt --log-json` | adapter | `core/tools.py::whatweb` + `modules/technologies.py::_merge_whatweb` |
 | `for h in $(cat live.txt); do curl -sI … grep -Ei 'server\|x-powered-by\|…'` | native | `modules/headers.py` — scores 7 security headers, records disclosures |
-| `wafw00f -i live.txt` | adapter + native | `modules/waf.py` (17 signature families + behavioural probes) and `core/tools.py::wafw00f` merged in |
+| `wafw00f -i live.txt` | adapter + native | `modules/waf.py` (16 WAF/CDN signature families + 4 behavioural probes; plain web servers such as Nginx/Apache are recorded separately and never counted as a WAF) and `core/tools.py::wafw00f` merged in |
 | `wpscan --url … --enumerate vp,vt,u` | adapter + native | `modules/wordpress.py` implements the same enumeration natively; `core/tools.py::wpscan` adds CVE data when installed |
 | `nmap -sV -iL resolved.txt` | covered + adapter | `core/portscan.py` (nmap when present) and `core/tools.py::nmap_services` |
 
@@ -119,3 +119,50 @@ Every "native" and "adapter" row above has an automated test, except where the
 external binary is not installed on the development machine (nmap, whatweb,
 wafw00f, wpscan, amass). Those adapters are covered by stub-binary parsing tests
 in `tests/test_tool_adapters.py`.
+
+## Corrections made during verification
+
+Two claims in the first version of this document were wrong. Both were found by
+measuring rather than re-reading the code.
+
+**1. "17 signature families" included a plain web server.**
+`("Nginx (no WAF)", ["server:nginx"], [], [])` was a row in `SIGNATURES`. Because
+`detect_signatures` returned every match and `waf_detected` was set from a non-empty
+signature list, a server whose only distinguishing feature was `Server: nginx`
+was reported as *"behind a WAF/CDN"*. Verified before the fix:
+
+```
+plain nginx    detected=True   signatures=['Nginx (no WAF)']
+```
+
+`SERVER_SIGNATURES` now holds plain servers, `detect_server()` reports them in a
+separate `server_tech` field, and `SIGNATURES` contains only real WAF/CDN
+products (16 families). After the fix:
+
+```
+plain nginx    detected=False  signatures=[]            server_tech=Nginx
+Cloudflare     detected=True   signatures=['Cloudflare']
+Akamai         detected=True   signatures=['Akamai']
+```
+
+**2. Three adapters were registered but unreachable.**
+`dnsx`, `nmap_services` and `amass_intel_asn` existed in `core/tools.py` with no
+caller anywhere in the product code. A grep for call sites returned 0 for each.
+They are now wired:
+
+- `dnsx` — bulk resolution in `SubdomainsModule._validate`. dnsx can only add
+  coverage: any host it omits is re-checked with the native resolver, so a dnsx
+  filter cannot drop a real subdomain.
+- `nmap_services` — `PortScanner._nmap` now delegates to it, so there is exactly
+  one code path that invokes nmap.
+- `amass_intel_asn` — expands each discovered ASN into CIDRs, written to
+  `11-ASN/amass_cidrs.txt`.
+
+A regression test now fails if any public adapter has no call site in the product
+code, and that test was mutation-verified: removing the `amass_intel_asn` call
+makes it fail with `Left contains one more item: 'amass_intel_asn'`.
+
+**3. Unannounced addresses were dropped silently.**
+An IP with no announcing ASN (documentation ranges such as `93.184.216.34`)
+produced no output at all, which reads as "covered". Those addresses are now
+listed in `11-ASN/unannounced_addresses.txt` so the gap is visible.

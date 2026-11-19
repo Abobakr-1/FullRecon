@@ -487,6 +487,26 @@ class SubdomainModule:
             self.ctx.warn("subdomain DNS validation disabled (--no-resolve)")
             return list(hosts), [], {"enabled": bool(wildcard_addr)}
 
+        # dnsx resolves large lists far faster than per-host lookups.
+        if cfg.use_external_tools and tools.tool_available("dnsx"):
+            bulk = tools.dnsx(hosts, timeout=min(cfg.external_tool_timeout, 240.0))
+            if bulk.ok:
+                hit = {name.lower() for name in bulk.items}
+                resolved = [h for h in hosts if h.lower() in hit]
+                # A resolved host may be absent from dnsx output because of its
+                # own filters; confirm anything missing with the native resolver
+                # so dnsx can only ever add coverage, never remove it.
+                for host in hosts:
+                    if host.lower() not in hit and self._lookup(host, resolver):
+                        resolved.append(host)
+                resolved = dedupe(resolved)
+                unresolved = [h for h in hosts if h not in set(resolved)]
+                wildcard = {"enabled": bool(wildcard_addr), "address": wildcard_addr}
+                if wildcard_addr:
+                    wildcard["detail"] = f"*.{domain} resolves to {wildcard_addr}"
+                self.ctx.debug("dnsx resolved %d/%d hosts", len(resolved), len(hosts))
+                return resolved, unresolved, wildcard
+
         def check(host: str) -> Tuple[str, bool]:
             return host, self._lookup(host, resolver)
 

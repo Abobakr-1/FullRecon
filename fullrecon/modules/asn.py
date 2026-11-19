@@ -32,6 +32,7 @@ class AsnModule:
         self.addresses: Dict[str, List[str]] = {}   # host -> IPs
         self.asns: Dict[int, Dict[str, Any]] = {}
         self.prefixes: List[str] = []
+        self.unannounced: List[str] = []
 
     # ------------------------------------------------------------------
     def _collect_addresses(self) -> Dict[str, List[str]]:
@@ -129,6 +130,11 @@ class AsnModule:
                     entry["prefixes"].append(info["prefix"])
             elif info["error"]:
                 ctx.debug("ASN lookup failed for %s: %s", ip, info["error"])
+            else:
+                # The address sits in an unannounced block (e.g. documentation
+                # ranges). Record it so the report does not imply full coverage.
+                self.unannounced.append(ip)
+                ctx.debug("no announcing ASN for %s", ip)
 
         # Expand the primary ASN(s) so the operator sees the whole netblock.
         extra_prefixes: List[str] = []
@@ -149,6 +155,19 @@ class AsnModule:
         elif tools.tool_available("amass"):
             ctx.debug("amass installed but no --org supplied; skipping org intel")
 
+        # amass intel -asn expands each discovered ASN into its CIDR blocks,
+        # which RIPE's announced-prefixes call does not always list in full.
+        amass_prefixes: List[str] = []
+        if tools.tool_available("amass"):
+            for asn in list(self.asns)[:3]:
+                result = tools.amass_intel_asn(str(asn), timeout=600)
+                if result.ok and result.items:
+                    amass_prefixes.extend(result.items)
+                    ctx.debug("amass intel -asn AS%s: %d entries", asn, len(result.items))
+        if amass_prefixes:
+            extra_prefixes.extend(amass_prefixes)
+            ctx.emit(f"  amass intel -asn: {len(dedupe(amass_prefixes))} CIDR(s)")
+
         self.prefixes = dedupe(extra_prefixes)
         ctx.emit(
             f"ASN: {len(self.asns)} ASN(s), "
@@ -156,7 +175,7 @@ class AsnModule:
         )
         self.state.asns = {str(k): v for k, v in self.asns.items()}
         self.state.summary["asn"] = {"asns": self.state.asns, "prefixes": self.prefixes}
-        self._write(lookups, amass_domains)
+        self._write(lookups, amass_domains, amass_prefixes)
         return {
             "asns": len(self.asns),
             "prefixes": len(self.prefixes),
@@ -164,7 +183,8 @@ class AsnModule:
         }
 
     # ------------------------------------------------------------------
-    def _write(self, lookups: List[Dict[str, Any]], amass_domains: List[str]) -> None:
+    def _write(self, lookups: List[Dict[str, Any]], amass_domains: List[str],
+               amass_prefixes: Optional[List[str]] = None) -> None:
         out = self.ctx.out
 
         map_lines = []
@@ -183,6 +203,9 @@ class AsnModule:
         out.write("asn", "asn_info.txt", asn_lines)
 
         out.write("asn", "announced_prefixes.txt", self.prefixes)
+        if self.unannounced:
+            # Documented as a coverage gap, not a silent omission.
+            out.write("asn", "unannounced_addresses.txt", sorted(self.unannounced))
         detail = [
             f"{entry['ip']}\tAS{entry['asn'] if entry['asn'] is not None else '?'}\t"
             f"{entry.get('holder', '')}\t{entry.get('prefix', '')}"
@@ -191,6 +214,8 @@ class AsnModule:
         out.write("asn", "ip_asn_map.txt", detail)
         if amass_domains:
             out.write("asn", "amass_related_domains.txt", amass_domains)
+        if amass_prefixes:
+            out.write("asn", "amass_cidrs.txt", dedupe(amass_prefixes))
 
         out.write_json("asn", "asn.json", {
             "hosts": self.addresses,

@@ -54,7 +54,23 @@ SIGNATURES: List[Tuple[str, List[str], List[str], List[str]]] = [
     ("Azure Front Door", ["x-azure-ref", "x-fd-int-roxy-purgeid"],
      [], ["azure front door"]),
     ("Varnish", ["x-varnish", "via:varnish"], [], ["varnish"]),
-    ("Nginx (no WAF)", ["server:nginx"], [], []),
+]
+
+# Servers/CDNs that are infrastructure, not a WAF.  Detected for context only,
+# and never counted as evidence that a blocking layer exists.
+NON_WAF_SIGNATURES = {
+    "Cloudflare": False,   # Cloudflare IS a WAF/CDN
+    "Fastly CDN": False,   # CDN, not a WAF
+    "Varnish": False,      # reverse proxy/cache, not a WAF
+}
+
+# Plain web servers. Reported in `server` context, never as a WAF.
+SERVER_SIGNATURES: List[Tuple[str, List[str]]] = [
+    ("Nginx", ["server:nginx"]),
+    ("Apache", ["server:apache"]),
+    ("IIS", ["server:microsoft-iis"]),
+    ("LiteSpeed", ["server:litespeed"]),
+    ("Caddy", ["server:caddy"]),
 ]
 
 # Benign probe payloads. These are ordinary strings, not exploit attempts.
@@ -79,6 +95,12 @@ class WafModule:
 
     # ------------------------------------------------------------------
     def detect_signatures(self, headers: Dict[str, str], body: str) -> List[str]:
+        """Return detected WAF/CDN names only.
+
+        Plain web servers are recorded separately by :meth:`detect_server` and
+        must never appear here, because a server banner is not evidence of a
+        blocking layer.
+        """
         blob = " ".join(f"{k}:{v}" for k, v in headers.items()).lower()
         cookies = headers.get("set-cookie", "").lower()
         body_lower = (body or "")[:20000].lower()
@@ -93,6 +115,15 @@ class WafModule:
             if any(marker in body_lower for marker in body_hints):
                 found.append(name)
         return dedupe(found)
+
+    @staticmethod
+    def detect_server(headers: Dict[str, str]) -> str:
+        """Identify the plain web server for context (never counted as a WAF)."""
+        blob = " ".join(f"{k}:{v}" for k, v in headers.items()).lower()
+        for name, header_hints in SERVER_SIGNATURES:
+            if any(hint in blob for hint in header_hints):
+                return name
+        return ""
 
     def probe(self, base_url: str) -> Dict[str, Any]:
         """Run the behavioural probe set against one host."""
@@ -120,6 +151,7 @@ class WafModule:
                 baseline_length = len(resp.body)
                 findings["server"] = resp.header("server")
                 findings["signatures"] = self.detect_signatures(resp.headers, resp.body)
+                findings["server_tech"] = self.detect_server(resp.headers)
                 continue
 
             blocked = resp.status in BLOCK_STATUSES

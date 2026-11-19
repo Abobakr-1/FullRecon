@@ -602,3 +602,82 @@ def test_ffuf_subdomains_requires_wordlist(tmp_path):
     ctx, _, _ = make_ctx(tmp_path, use_external_tools=True, ffuf_enabled=True)
     module = SubdomainModule(ctx)
     assert module._ffuf_subdomains("example.com", str(tmp_path / "missing.txt")) == []
+
+
+# ---------------------------------------------------------------------------
+# Regression: WAF must not treat a plain web server as a blocking layer
+# ---------------------------------------------------------------------------
+
+
+def test_waf_plain_nginx_is_not_a_waf(tmp_path):
+    """Regression: 'Nginx (no WAF)' used to set waf_detected=True."""
+    ctx, state, _ = make_ctx(tmp_path, domain="plain.test")
+    state.live = [{"host": "plain.test", "url": "https://plain.test/",
+                   "final_url": "https://plain.test/", "scheme": "https"}]
+    ctx.http.get = lambda url, **k: Response(
+        url=url, status=200, body="<html>hello</html>",
+        headers={"content-type": "text/html", "server": "nginx"},
+    )
+    WafModule(ctx).run()
+
+    entry = state.waf_results[0]
+    assert entry["waf_detected"] is False, "a plain nginx banner is not a WAF"
+    assert entry["signatures"] == []
+    # The server is still recorded, separately from the WAF verdict.
+    assert entry["server_tech"] == "Nginx"
+
+
+def test_waf_real_vendors_still_detected(tmp_path):
+    ctx, state, _ = make_ctx(tmp_path, domain="cf.test")
+    state.live = [{"host": "cf.test", "url": "https://cf.test/",
+                   "final_url": "https://cf.test/", "scheme": "https"}]
+    ctx.http.get = lambda url, **k: Response(
+        url=url, status=200, body="<html>x</html>",
+        headers={"cf-ray": "8abc", "server": "cloudflare"},
+    )
+    WafModule(ctx).run()
+    assert state.waf_results[0]["waf_detected"] is True
+    assert "Cloudflare" in state.waf_results[0]["signatures"]
+
+
+def test_waf_families_contain_no_plain_servers():
+    from fullrecon.modules.waf import SERVER_SIGNATURES, SIGNATURES
+
+    waf_names = {name for name, *_ in SIGNATURES}
+    server_names = {name for name, _ in SERVER_SIGNATURES}
+    assert not (waf_names & server_names), "server signatures must not be WAF families"
+    for plain in ("Nginx", "Apache", "IIS", "LiteSpeed", "Caddy"):
+        assert plain in server_names
+        assert plain not in waf_names
+
+
+# ---------------------------------------------------------------------------
+# Regression: every registered adapter must have a reachable call site
+# ---------------------------------------------------------------------------
+
+
+def test_every_adapter_is_reachable_from_product_code():
+    """A registered adapter with no caller is dead code, not integration."""
+    import pathlib
+    import re
+
+    from fullrecon.core import tools as toolmod
+
+    root = pathlib.Path(__file__).resolve().parent.parent / "fullrecon"
+    sources = "\n".join(
+        p.read_text(encoding="utf-8")
+        for p in root.rglob("*.py")
+        if p.name != "tools.py"
+    )
+    adapters = [
+        name for name in dir(toolmod)
+        if callable(getattr(toolmod, name))
+        and not name.startswith("_")
+        and name not in {
+            "ToolResult", "tool_path", "tool_available", "available_tools",
+            "missing_tools", "run_tool", "summary",
+        }
+    ]
+    assert adapters, "no adapters discovered"
+    unreachable = [a for a in adapters if not re.search(rf"\b{a}\b", sources)]
+    assert unreachable == [], f"adapters with no caller: {unreachable}"
