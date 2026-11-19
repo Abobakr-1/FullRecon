@@ -10,7 +10,7 @@ $ pytest -q
 ........................................................................ [ 46%]
 ........................................................................ [ 92%]
 ............                                                             [100%]
-156 passed in 4.06s
+165 passed in 8.67s
 ```
 
 | File | Tests | Covers |
@@ -203,8 +203,21 @@ Reports were present: `summary.txt`, `report.json`, `report.html`, `manifest.jso
 Five modules and an external-tool layer were added after the 1.0 release.
 Verification performed:
 
-**Offline tests** — 27 new tests in `tests/test_recon_additions.py`, all passing
-with no network access. The shared `make_ctx` helper now forces
+**Offline tests** — 36 new tests across two files, all passing with no network
+access:
+
+- `tests/test_recon_additions.py` (27) — module behaviour: RDAP parsing, ASN,
+  header scoring, WAF detection, WordPress enumeration.
+- `tests/test_tool_adapters.py` (9) — adapter *parsing*, using stub executables
+  placed on `PATH`. This closes a real gap: `nmap`, `whatweb`, `wafw00f`,
+  `wpscan` and `amass` are not installed on the development machine, so their
+  output parsers were previously unreachable by tests. The stubs let each
+  adapter run end to end against realistic tool output.
+
+One assertion was mutation-tested: breaking the whatweb JSON reader (so it never
+appends parsed lines) makes the test fail with `assert 0 == 1`, confirming the
+test proves the parser works rather than merely that the binary was found.
+ The shared `make_ctx` helper now forces
 `use_external_tools=False`, so the suite can never shell out to a real recon
 binary. That was a genuine bug: the first run of the extended suite hung because
 the subdomains module invoked the installed `subfinder`.
@@ -278,3 +291,29 @@ $ fullrecon --list-modules
    testing four candidate APIs.
 7. The GitHub remote of the restored repository pointed at the local bundle
    file, so `git push` silently targeted the bundle. Corrected to the GitHub URL.
+
+
+## Correction: claims that had to be re-verified
+
+Two statements made earlier in this document were wrong and are corrected here.
+
+1. **"156 tests"** — that count was taken before `tests/test_tool_adapters.py`
+   existed. The current, verified count is **165**.
+
+2. **"nmap/wafw00f/wpscan/amass adapters were tested with fakes"** — this was
+   overstated. The only tests touching those adapters asserted that empty input
+   returns a failure; the parsing code itself was never executed. That is now
+   genuinely covered by the stub-binary tests above.
+
+Additionally, the CI workflow was lost when the project directory was replaced
+and restored from a git bundle. It has been recreated and its YAML validated.
+It is still **not on GitHub**: the OAuth token lacks the `workflow` scope, so the
+push is rejected with:
+
+```
+refusing to allow an OAuth App to create or update workflow
+`.github/workflows/tests.yml` without `workflow` scope
+```
+
+To publish it, either grant the scope (`gh auth refresh -h github.com -s workflow`)
+or add the file through GitHub's web editor.
