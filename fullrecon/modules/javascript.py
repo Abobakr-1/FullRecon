@@ -56,6 +56,28 @@ COMMENT_RE = re.compile(r"//[^\n]{4,300}|/\*(?:[^*]|\*(?!/)){4,400}\*/", re.DOTA
 CONFIG_REF_RE = re.compile(
     r"""(?i)(?:window\.|process\.env\.|__ENV__|config\.)([A-Za-z_][A-Za-z0-9_.]{2,60})"""
 )
+
+# Mapped from the recon roadmap's manual `grep` list, items 8-13.
+API_VERSION_RE = re.compile(r"""['"`](/api/v[0-9]+[^'"`\s]{0,200})['"`]""", re.IGNORECASE)
+WEBSOCKET_RE = re.compile(r"""(wss?://[^\s'"`<>]{4,300})""", re.IGNORECASE)
+SOURCE_MAP_RE = re.compile(r"""[^\s'"`<>]{2,300}?\.map(?:\?[^\s'"`<>]*)?(?=['"`\s])""")
+SENSITIVE_FILE_RE = re.compile(
+    r"""[/A-Za-z0-9_.-]{1,200}?\.(?:php|json|xml|config|graphql|ya?ml|env|sql|bak|old)\b""",
+    re.IGNORECASE,
+)
+CLIENT_CALL_RE = re.compile(
+    r"""(fetch\s*\(|axios(?:\.\w+)?\s*\(|new\s+XMLHttpRequest|\.ajax\s*\(|EventSource\s*\()"""
+)
+# Parameter names the roadmap greps for (item 7).
+PARAM_NAME_RE = re.compile(
+    r"""(?i)\b(id|userId|user_id|accountId|account_id|redirect|returnUrl|return_url|"""
+    r"""role|tenant|org|organization|admin|isAdmin|debug|token|apiKey|api_key)\b"""
+)
+JS_SENSITIVE_HINTS = (
+    "admin", "administrator", "management", "login", "logout", "signin", "signup",
+    "register", "auth", "user", "account", "profile", "settings",
+)
+
 SENSITIVE_COMMENT_HINTS = (
     "todo", "fixme", "hack", "password", "passwd", "secret", "token", "api_key",
     "apikey", "credential", "internal", "staging", "admin", "debug", "backdoor",
@@ -74,6 +96,12 @@ class JavaScriptModule:
         self.comments: List[Dict[str, str]] = []
         self.config_refs: Set[str] = set()
         self.endpoints: Set[str] = set()
+        self.api_versions: Set[str] = set()
+        self.websockets: Set[str] = set()
+        self.source_maps: Set[str] = set()
+        self.sensitive_files: Set[str] = set()
+        self.params: Set[str] = set()
+        self.client_calls: Dict[str, int] = {}
 
     # ------------------------------------------------------------------
     def _collect_files(self) -> List[str]:
@@ -119,6 +147,12 @@ class JavaScriptModule:
             "secrets": secrets,
             "comments": comments,
             "config_refs": refs,
+            "api_versions": self._find_api_versions(body),
+            "websockets": self._find_websockets(body),
+            "source_maps": self._find_source_maps(body),
+            "sensitive_files": self._find_sensitive_files(body),
+            "client_calls": self._count_client_calls(body),
+            "params": self._find_params(body),
         }
 
     # ------------------------------------------------------------------
@@ -178,6 +212,46 @@ class JavaScriptModule:
         refs = {m.group(1) for m in CONFIG_REF_RE.finditer(body)}
         return sorted(ref for ref in refs if len(ref) > 3)[:200]
 
+    # -- roadmap grep equivalents (items 8-13) -------------------------
+    @staticmethod
+    def _find_api_versions(body: str) -> List[str]:
+        """Item 8: ``grep -Eo '/api/v[0-9]+[^\"'\\'' ]*'``"""
+        return sorted({m.group(1) for m in API_VERSION_RE.finditer(body)})[:100]
+
+    @staticmethod
+    def _find_websockets(body: str) -> List[str]:
+        """Item 9: ``grep -Ei 'ws://|wss://|websocket'``"""
+        return sorted({m.group(1).rstrip(".,;") for m in WEBSOCKET_RE.finditer(body)})[:50]
+
+    @staticmethod
+    def _find_source_maps(body: str) -> List[str]:
+        """Item 12: ``grep -Eo '[^\"'\\'' ]+\\.map'``"""
+        found = {m.group(0) for m in SOURCE_MAP_RE.finditer(body)}
+        # Reject obvious noise such as CSS map fragments inside strings.
+        return sorted(f for f in found if len(f) < 300)[:50]
+
+    @staticmethod
+    def _find_sensitive_files(body: str) -> List[str]:
+        """Item 10: interesting file paths ending in php/json/xml/config/graphql."""
+        found = {m.group(0) for m in SENSITIVE_FILE_RE.finditer(body)}
+        return sorted(f for f in found if len(f) > 3 and "/" in f)[:100]
+
+    @staticmethod
+    def _count_client_calls(body: str) -> Dict[str, int]:
+        """Item 13: how the application communicates (fetch/axios/XHR/SSE)."""
+        counts: Dict[str, int] = {}
+        for match in CLIENT_CALL_RE.finditer(body):
+            label = match.group(1).split("(")[0].strip().lower()
+            if label.startswith("new xmlhttprequest"):
+                label = "xmlhttprequest"
+            counts[label] = counts.get(label, 0) + 1
+        return counts
+
+    @staticmethod
+    def _find_params(body: str) -> List[str]:
+        """Item 7: parameter names worth reviewing (id, redirectUrl, role, ...)."""
+        return sorted({m.group(1) for m in PARAM_NAME_RE.finditer(body)})[:100]
+
     # ------------------------------------------------------------------
     def run(self) -> Dict[str, object]:
         cfg = self.ctx.cfg
@@ -206,12 +280,25 @@ class JavaScriptModule:
                 self.secrets.extend(result["secrets"])
                 self.comments.extend(result["comments"])
                 self.config_refs.update(result["config_refs"])
+                self.api_versions.update(result.get("api_versions", []))
+                self.websockets.update(result.get("websockets", []))
+                self.source_maps.update(result.get("source_maps", []))
+                self.sensitive_files.update(result.get("sensitive_files", []))
+                self.params.update(result.get("params", []))
+                for label, count in (result.get("client_calls") or {}).items():
+                    self.client_calls[label] = self.client_calls.get(label, 0) + count
 
         self.state.js_files = files
         self.state.js_endpoints = sorted(self.endpoints)
         self.state.js_secrets = self.secrets
         self.state.js_comments = self.comments
         self.state.js_config_refs = sorted(self.config_refs)
+        self.state.js_api_versions = sorted(self.api_versions)
+        self.state.js_websockets = sorted(self.websockets)
+        self.state.js_source_maps = sorted(self.source_maps)
+        self.state.js_sensitive_files = sorted(self.sensitive_files)
+        self.state.js_client_calls = dict(self.client_calls)
+        self.state.js_params = sorted(self.params)
         self._write(files, analysed)
 
         high = sum(1 for s in self.secrets if s["confidence"] == "high")
@@ -249,6 +336,14 @@ class JavaScriptModule:
             f"{c['source']}\t{c['comment']}" for c in self.comments
         ])
         out.write("javascript", "config_references.txt", sorted(self.config_refs))
+        out.write("javascript", "api_versions.txt", sorted(self.api_versions))
+        out.write("javascript", "websocket_endpoints.txt", sorted(self.websockets))
+        out.write("javascript", "source_maps.txt", sorted(self.source_maps))
+        out.write("javascript", "interesting_file_paths.txt", sorted(self.sensitive_files))
+        out.write("javascript", "parameter_names.txt", sorted(self.params))
+        out.write("javascript", "client_calls.txt", [
+            f"{label}\t{count}" for label, count in sorted(self.client_calls.items())
+        ])
         out.write("javascript", "all_js_urls_inline.txt", [
             f"{a['url']}\t{a['size']}\t{a['mime']}" for a in analysed
         ])

@@ -132,7 +132,11 @@ def build_parser() -> argparse.ArgumentParser:
     ext.add_argument("--external-timeout", type=float, metavar="SEC", default=None,
                      help="timeout for each external tool call (default: 240)")
     ext.add_argument("--ffuf", action="store_true",
-                     help="use ffuf for content discovery when installed")
+                     help="use ffuf for subdomain fuzzing and content discovery")
+    ext.add_argument("--httpx", dest="httpx", action="store_true",
+                     help="pre-probe live hosts with httpx when installed")
+    ext.add_argument("--whatweb", dest="whatweb", action="store_true",
+                     help="add whatweb technology detection when installed")
     ext.add_argument("--no-waf-probes", action="store_true",
                      help="fingerprint WAFs by signature only, send no probe requests")
     ext.add_argument("--check-tools", action="store_true",
@@ -312,6 +316,10 @@ def build_config(args: argparse.Namespace) -> Config:
         cfg.external_tool_timeout = max(10.0, args.external_timeout)
     if args.ffuf:
         cfg.ffuf_enabled = True
+    if args.httpx:
+        cfg.httpx_enabled = True
+    if args.whatweb:
+        cfg.whatweb_enabled = True
     if args.no_waf_probes:
         cfg.waf_probes = False
     if args.org:

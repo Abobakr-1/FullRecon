@@ -7,10 +7,12 @@ results can be audited rather than guessed.
 from __future__ import annotations
 
 import json
+import json
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 
+from ..core import tools
 from ..core.context import ModuleContext
 from ..utils.helpers import dedupe, extract_html_info, truncate
 
@@ -196,6 +198,9 @@ class TechnologyModule:
                         if key not in merged or (entry.get("version") and not merged[key].get("version")):
                             merged[key] = entry
 
+        # whatweb adds plugins and versions the header/body signatures miss.
+        self._merge_whatweb(per_host, urls)
+
         # Aggregate for the report while keeping per-host detail.
         aggregated: Dict[str, List[Dict[str, str]]] = {}
         for host, entries in per_host.items():
@@ -210,6 +215,49 @@ class TechnologyModule:
         total = sum(len(v) for v in aggregated.values())
         ctx.emit(f"Technologies: {total} unique across {len(per_host)} host(s)")
         return {"technologies": total, "hosts": len(per_host)}
+
+    # ------------------------------------------------------------------
+    def _merge_whatweb(self, per_host: Dict[str, Dict[str, Dict[str, str]]],
+                       urls: List[str]) -> None:
+        """Fold whatweb's plugin list into the per-host technology map."""
+        cfg = self.ctx.cfg
+        if not (cfg.use_external_tools and tools.tool_available("whatweb")):
+            return
+
+        result = tools.whatweb(urls[:50], timeout=min(cfg.external_tool_timeout, 300.0))
+        if not result.ok or not result.items:
+            self.ctx.debug("whatweb produced no results")
+            return
+
+        added = 0
+        for line in result.items:
+            try:
+                record = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            target = str(record.get("target") or "")
+            host = target.split("://")[-1].split("/")[0].lower()
+            if not host:
+                continue
+            bucket = per_host.setdefault(host, {})
+            for plugin, detail in (record.get("plugins") or {}).items():
+                if plugin not in bucket:
+                    version = ""
+                    if isinstance(detail, dict):
+                        versions = detail.get("version") or []
+                        if isinstance(versions, list) and versions:
+                            version = str(versions[0])
+                        elif versions:
+                            version = str(versions)
+                    bucket[plugin] = {
+                        "name": plugin,
+                        "category": "WhatWeb",
+                        "version": version,
+                        "evidence": f"whatweb plugin match on {host}",
+                    }
+                    added += 1
+        if added:
+            self.ctx.emit(f"  whatweb: {added} additional technology match(es)")
 
     # ------------------------------------------------------------------
     def _write(self, per_host, aggregated) -> None:

@@ -11,6 +11,7 @@ from fullrecon.core import tools
 from fullrecon.core.scanner import Response
 from fullrecon.modules.asn import AsnModule
 from fullrecon.modules.headers import HEADER_RULES, HeadersModule
+from fullrecon.modules.javascript import JavaScriptModule
 from fullrecon.modules.waf import BLOCK_STATUSES, PROBES, SIGNATURES, WafModule
 from fullrecon.modules.whois import FALLBACK_RDAP, WhoisModule, _rdap_key
 from fullrecon.modules.wordpress import (
@@ -423,3 +424,181 @@ def test_wordpress_ignores_non_wordpress(tmp_path):
                                                      "<html><body>plain site</body></html>")})
     WordPressModule(ctx).run()
     assert state.wordpress_sites == []
+
+
+# ---------------------------------------------------------------------------
+# JavaScript roadmap greps (items 7-13 from the recon roadmap)
+# ---------------------------------------------------------------------------
+
+
+JS_ROADMAP_SAMPLE = """
+const cfg = { baseURL: "/api/v2/users", apiKey: "AKIA7QZ3WX5PLKJ2HGFD" };
+fetch("/api/v2/orders?limit=10");
+axios.post("/api/v3/audit");
+const ws = new WebSocket("wss://example.com/socket");
+new EventSource("/api/v3/stream");
+new XMLHttpRequest();
+//# sourceMappingURL=main.js.map
+const path = "/app/config/production.json";
+const redir = req.query.returnUrl;
+const who = userId;
+"""
+
+
+def test_js_api_versions_extracted():
+    from fullrecon.modules.javascript import JavaScriptModule as J
+
+    versions = J._find_api_versions(JS_ROADMAP_SAMPLE)
+    assert "/api/v2/users" in versions
+    assert "/api/v2/orders?limit=10" in versions
+    assert "/api/v3/audit" in versions
+
+
+def test_js_websockets_extracted():
+    from fullrecon.modules.javascript import JavaScriptModule as J
+
+    assert J._find_websockets(JS_ROADMAP_SAMPLE) == ["wss://example.com/socket"]
+
+
+def test_js_source_maps_extracted():
+    from fullrecon.modules.javascript import JavaScriptModule as J
+
+    maps = J._find_source_maps(JS_ROADMAP_SAMPLE + "\n//@ sourceMappingURL=bundle.js.map")
+    assert any("main.js.map" in m for m in maps)
+    assert all(len(m) < 300 for m in maps)
+
+
+def test_js_sensitive_files_extracted():
+    from fullrecon.modules.javascript import JavaScriptModule as J
+
+    files = J._find_sensitive_files(JS_ROADMAP_SAMPLE)
+    assert "/app/config/production.json" in files
+
+
+def test_js_client_calls_counted():
+    from fullrecon.modules.javascript import JavaScriptModule as J
+
+    calls = J._count_client_calls(JS_ROADMAP_SAMPLE)
+    assert calls["fetch"] == 1
+    assert calls["eventsource"] == 1
+    assert calls["xmlhttprequest"] == 1
+
+
+def test_js_params_extracted():
+    from fullrecon.modules.javascript import JavaScriptModule as J
+
+    params = J._find_params(JS_ROADMAP_SAMPLE)
+    assert "returnUrl" in params
+    assert "userId" in params
+
+
+def test_js_module_writes_new_output_files(tmp_path):
+    ctx, state, out = make_ctx(tmp_path, http=FakeHttp({
+        "app.js": Response(url="https://example.com/app.js", status=200,
+                           headers={"content-type": "application/javascript"},
+                           body=JS_ROADMAP_SAMPLE),
+    }))
+    state.js_files = ["https://example.com/app.js"]
+    result = JavaScriptModule(ctx).run()
+
+    assert result["js_files"] == 1
+    base = out.dir("javascript")
+    for name in ("api_versions.txt", "websocket_endpoints.txt", "source_maps.txt",
+                 "interesting_file_paths.txt", "parameter_names.txt", "client_calls.txt"):
+        assert (base / name).is_file(), f"{name} was not written"
+    assert "/api/v2/users" in (base / "api_versions.txt").read_text(encoding="utf-8")
+    assert "wss://example.com/socket" in (base / "websocket_endpoints.txt").read_text(encoding="utf-8")
+    # State must expose the same data for reporting.
+    assert state.js_api_versions
+    assert state.js_websockets == ["wss://example.com/socket"]
+    assert state.js_client_calls.get("fetch") == 1
+
+
+# ---------------------------------------------------------------------------
+# External tool wiring
+# ---------------------------------------------------------------------------
+
+
+def test_httpx_probe_is_skipped_when_disabled(tmp_path, monkeypatch):
+    """httpx_enabled defaults to False; the native prober must be used alone."""
+    from fullrecon.modules.live_hosts import LiveHostModule
+
+    ctx, state, _ = make_ctx(tmp_path)
+    module = LiveHostModule(ctx)
+    called = []
+    monkeypatch.setattr(tools, "httpx", lambda *a, **k: called.append(a))
+    assert module._httpx_probe([("https", "example.com")]) == []
+    assert called == [], "httpx must not run unless explicitly enabled"
+
+
+def test_httpx_probe_parses_json_when_enabled(tmp_path, monkeypatch):
+    import json as _json
+
+    from fullrecon.modules.live_hosts import LiveHostModule
+
+    ctx, state, _ = make_ctx(tmp_path, httpx_enabled=True, use_external_tools=True)
+    module = LiveHostModule(ctx)
+    record = {"url": "https://example.com/", "status_code": 200, "title": "Example",
+              "webserver": "nginx", "tech": ["Nginx"], "final_url": "https://example.com/"}
+    fake = tools.ToolResult(tool="httpx", available=True, ok=True, items=["x"],
+                            extra={"parsed": [record]})
+    monkeypatch.setattr(tools, "httpx", lambda *a, **k: fake)
+    monkeypatch.setattr(tools, "tool_available", lambda name: name == "httpx")
+
+    entries = module._httpx_probe([("https", "example.com")])
+    assert len(entries) == 1
+    assert entries[0]["status"] == 200
+    assert entries[0]["host"] == "example.com"
+    assert entries[0]["port"] == 443
+    assert entries[0]["source"] == "httpx"
+
+
+def test_whatweb_merge_adds_technologies(tmp_path, monkeypatch):
+    import json as _json
+
+    from fullrecon.modules.technologies import TechnologyModule
+
+    ctx, state, _ = make_ctx(tmp_path, use_external_tools=True)
+    module = TechnologyModule(ctx)
+    per_host = {"example.com": {}}
+    record = {"target": "https://example.com", "plugins": {
+        "Apache": {"version": ["2.4.7"]},
+        "PHP": {"version": ["8.1"]},
+    }}
+    fake = tools.ToolResult(tool="whatweb", available=True, ok=True,
+                            items=[_json.dumps(record)])
+    monkeypatch.setattr(tools, "whatweb", lambda *a, **k: fake)
+    monkeypatch.setattr(tools, "tool_available", lambda name: name == "whatweb")
+
+    module._merge_whatweb(per_host, ["https://example.com"])
+    assert "Apache" in per_host["example.com"]
+    assert per_host["example.com"]["Apache"]["version"] == "2.4.7"
+    assert per_host["example.com"]["PHP"]["category"] == "WhatWeb"
+
+
+def test_ffuf_subdomains_filters_to_target_domain(tmp_path, monkeypatch):
+    from fullrecon.modules.subdomains import SubdomainModule
+
+    ctx, state, _ = make_ctx(tmp_path, use_external_tools=True, ffuf_enabled=True)
+    module = SubdomainModule(ctx)
+    wordlist = tmp_path / "subs.txt"
+    wordlist.write_text("admin\nwww\n", encoding="utf-8")
+    fake = tools.ToolResult(tool="ffuf", available=True, ok=True, items=[
+        "https://admin.example.com",
+        "https://www.example.com",
+        "https://evil.com",           # must be dropped
+    ])
+    monkeypatch.setattr(tools, "ffuf", lambda *a, **k: fake)
+
+    found = module._ffuf_subdomains("example.com", str(wordlist))
+    assert "admin.example.com" in found
+    assert "www.example.com" in found
+    assert all("evil.com" not in name for name in found)
+
+
+def test_ffuf_subdomains_requires_wordlist(tmp_path):
+    from fullrecon.modules.subdomains import SubdomainModule
+
+    ctx, _, _ = make_ctx(tmp_path, use_external_tools=True, ffuf_enabled=True)
+    module = SubdomainModule(ctx)
+    assert module._ffuf_subdomains("example.com", str(tmp_path / "missing.txt")) == []

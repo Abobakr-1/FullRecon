@@ -159,7 +159,8 @@ class Config:
     katana_enabled: bool = True
     gau_enabled: bool = True
     httpx_enabled: bool = False            # httpx replaces native probing; opt-in
-    ffuf_enabled: bool = False             # ffuf replaces native content discovery
+    ffuf_enabled: bool = False             # ffuf for subdomain fuzzing / content
+    whatweb_enabled: bool = True           # merge whatweb results when installed
     katana_depth: int = 3
     external_tool_timeout: float = 240.0
 

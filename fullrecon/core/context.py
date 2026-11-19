@@ -54,6 +54,12 @@ class ReconState:
     js_secrets: List[Dict[str, str]] = field(default_factory=list)
     js_comments: List[Dict[str, str]] = field(default_factory=list)
     js_config_refs: List[str] = field(default_factory=list)
+    js_api_versions: List[str] = field(default_factory=list)
+    js_websockets: List[str] = field(default_factory=list)
+    js_source_maps: List[str] = field(default_factory=list)
+    js_sensitive_files: List[str] = field(default_factory=list)
+    js_client_calls: Dict[str, int] = field(default_factory=dict)
+    js_params: List[str] = field(default_factory=list)
 
     # H. content discovery
     content: List[Dict[str, Any]] = field(default_factory=list)

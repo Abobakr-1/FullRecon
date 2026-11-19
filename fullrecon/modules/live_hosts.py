@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlsplit
 
+from ..core import tools
 from ..core.context import ModuleContext
 from ..core.portscan import KNOWN_SERVICES, is_web_port, web_scheme
 from ..utils.helpers import dedupe, truncate
@@ -63,6 +65,56 @@ class LiveHostModule:
             return host
         return hostport
 
+    def _httpx_probe(self, candidates) -> List[Dict[str, object]]:
+        """Pre-probe with httpx when installed; results merge with native probes.
+
+        httpx is much faster over many hosts and reports tech detection, but the
+        native prober still runs so a missing or failed binary cannot reduce
+        coverage.
+        """
+        cfg = self.ctx.cfg
+        if not (cfg.use_external_tools and cfg.httpx_enabled and tools.tool_available("httpx")):
+            return []
+
+        urls = [f"{scheme}://{self._display_target(scheme, hostport)}/"
+                for scheme, hostport in candidates]
+        if not urls:
+            return []
+
+        result = tools.httpx(urls, timeout=min(cfg.external_tool_timeout, 300.0))
+        if not result.ok:
+            self.ctx.debug("httpx failed: %s", result.error)
+            return []
+
+        entries: List[Dict[str, object]] = []
+        for record in result.extra.get("parsed", []):
+            url = str(record.get("url") or "")
+            if not url:
+                continue
+            parts = urlsplit(url)
+            scheme = parts.scheme or "http"
+            port = parts.port or (443 if scheme == "https" else 80)
+            entries.append({
+                "host": (parts.hostname or "").lower(),
+                "url": url,
+                "final_url": str(record.get("final_url") or url),
+                "scheme": scheme,
+                "status": int(record.get("status_code") or 0),
+                "title": truncate(str(record.get("title") or ""), 120),
+                "server": str(record.get("webserver") or ""),
+                "powered_by": "",
+                "content_type": str(record.get("content_type") or ""),
+                "redirect": str(record.get("location") or ""),
+                "content_length": int(record.get("content_length") or 0),
+                "elapsed": 0.0,
+                "port": int(port),
+                "tech": record.get("tech") or [],
+                "source": "httpx",
+            })
+        if entries:
+            self.ctx.emit(f"  httpx: {len(entries)} endpoint(s) pre-probed")
+        return entries
+
     def _probe(self, scheme: str, hostport: str) -> Optional[Dict[str, object]]:
         url = f"{scheme}://{self._display_target(scheme, hostport)}/"
         resp = self.ctx.http.get(url, timeout=self.ctx.cfg.timeout)
@@ -106,6 +158,7 @@ class LiveHostModule:
 
         ctx.emit(f"Probing {len(candidates)} host/scheme combination(s)")
         results: List[Dict[str, object]] = []
+        results.extend(self._httpx_probe(candidates))
         workers = max(1, min(cfg.threads, 40))
         with ThreadPoolExecutor(max_workers=workers) as pool:
             futures = {pool.submit(self._probe, scheme, hostport): (scheme, hostport)

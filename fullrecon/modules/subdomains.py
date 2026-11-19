@@ -13,7 +13,7 @@ import string
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from ..core import tools
 from ..core.context import ModuleContext
@@ -302,6 +302,13 @@ class SubdomainModule:
         if cfg.use_external_tools:
             per_source.update(self._external_sources(domain))
 
+        # ffuf vhost/subdomain fuzzing (roadmap: ffuf -u https://FUZZ.domain).
+        if cfg.use_external_tools and cfg.ffuf_enabled and cfg.subdomain_wordlist:
+            ffuf_found = self._ffuf_subdomains(domain, cfg.subdomain_wordlist)
+            if ffuf_found:
+                per_source["ffuf"] = ffuf_found
+                ctx.emit(f"  {'ffuf':<16} {len(ffuf_found):>5} hostnames")
+
         # Optional brute force from a wordlist.
         if cfg.subdomain_bruteforce and cfg.subdomain_wordlist:
             brute = self._bruteforce(domain, cfg.subdomain_wordlist)
@@ -372,6 +379,34 @@ class SubdomainModule:
             else:
                 self.ctx.debug("assetfinder failed: %s", result.error)
         return found
+
+    def _ffuf_subdomains(self, domain: str, wordlist: str) -> List[str]:
+        """Fuzz ``https://FUZZ.<domain>`` with ffuf, keeping only matches."""
+        from pathlib import Path as _Path
+
+        if not _Path(wordlist).is_file():
+            self.ctx.warn(f"ffuf wordlist not found: {wordlist}")
+            return []
+        self.ctx.emit(f"Fuzzing subdomains with ffuf ({wordlist})")
+        result = tools.ffuf(
+            f"https://FUZZ.{domain}",
+            wordlist,
+            timeout=min(self.ctx.cfg.external_tool_timeout * 2, 900.0),
+            rate=max(1, int(self.ctx.cfg.rate_limit)),
+        )
+        if not result.ok:
+            self.ctx.debug("ffuf failed: %s", result.error)
+            self.state.errors.append(f"subdomains/ffuf: {result.error or result.skipped_reason}")
+            return []
+        names: List[str] = []
+        for url in result.items:
+            try:
+                host = urlsplit(url).hostname or ""
+            except ValueError:
+                continue
+            if host and in_domain(host.lower(), domain):
+                names.append(host.lower())
+        return dedupe(self._normalise(names, domain))
 
     def _guarded(self, name: str, domain: str) -> Tuple[List[str], str]:
         try:
