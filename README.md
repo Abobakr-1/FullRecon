@@ -488,8 +488,10 @@ See [docs/AUTHORIZED-USE.md](docs/AUTHORIZED-USE.md) for the full notice.
 ## Development
 
 ```bash
-pytest -q                  # 126 tests, no network required
+pytest -q                  # 165 tests, no network required
 pytest -q -k scope         # just scope tests
+./scripts/verify.sh        # everything CI runs: tests, CLI, imports, scope guard
+./scripts/verify.sh --fast # skip dependency install in a provisioned env
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the review bar,
