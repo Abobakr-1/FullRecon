@@ -169,7 +169,9 @@ def test_output_manager_creates_tree(tmp_path):
     cfg = Config(domain="example.com", out_dir=str(tmp_path))
     manager = OutputManager(cfg)
     manager.prepare()
-    for folder in ("01-Subdomains", "02-DNS", "10-Reports", "logs", "raw"):
+    from fullrecon.config import OUTPUT_DIRS
+    for folder in (OUTPUT_DIRS["subdomains"], OUTPUT_DIRS["dns"],
+                   OUTPUT_DIRS["reports"], OUTPUT_DIRS["logs"], OUTPUT_DIRS["raw"]):
         assert (manager.target_dir / folder).is_dir()
     assert (manager.target_dir / "README.txt").is_file()
 
@@ -216,6 +218,25 @@ def test_output_writers_and_manifest(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+ALL_MODULE_RUN_PATHS = (
+    "fullrecon.modules.subdomains.SubdomainModule.run",
+    "fullrecon.modules.dns.DnsModule.run",
+    "fullrecon.modules.whois.WhoisModule.run",
+    "fullrecon.modules.asn.AsnModule.run",
+    "fullrecon.modules.portscan.PortScanModule.run",
+    "fullrecon.modules.live_hosts.LiveHostModule.run",
+    "fullrecon.modules.technologies.TechnologyModule.run",
+    "fullrecon.modules.headers.HeadersModule.run",
+    "fullrecon.modules.waf.WafModule.run",
+    "fullrecon.modules.urls.UrlModule.run",
+    "fullrecon.modules.javascript.JavaScriptModule.run",
+    "fullrecon.modules.api.ApiModule.run",
+    "fullrecon.modules.content_discovery.ContentModule.run",
+    "fullrecon.modules.wordpress.WordPressModule.run",
+    "fullrecon.modules.intelligence.IntelligenceModule.run",
+)
+
+
 class _NoNetworkHttp:
     requests = 0
 
@@ -241,15 +262,7 @@ def test_orchestrator_runs_pipeline_and_writes_reports(tmp_path, monkeypatch):
     monkeypatch.setattr(
         "fullrecon.modules.dns.DnsModule.run", lambda self: {"hosts": 1},
     )
-    for module_path in (
-        "fullrecon.modules.portscan.PortScanModule.run",
-        "fullrecon.modules.live_hosts.LiveHostModule.run",
-        "fullrecon.modules.technologies.TechnologyModule.run",
-        "fullrecon.modules.urls.UrlModule.run",
-        "fullrecon.modules.javascript.JavaScriptModule.run",
-        "fullrecon.modules.api.ApiModule.run",
-        "fullrecon.modules.content_discovery.ContentModule.run",
-    ):
+    for module_path in ALL_MODULE_RUN_PATHS:
         monkeypatch.setattr(module_path, lambda self: {})
 
     state = orchestrator.run(MODULE_GROUPS["default"])
@@ -313,16 +326,8 @@ def test_cli_authorization_gate(capsys, tmp_path, monkeypatch):
 
 def test_cli_full_run_offline(tmp_path, monkeypatch):
     """Smoke-test the whole CLI with modules stubbed out."""
-    for name in ("subdomains", "dns", "portscan", "live_hosts", "technologies",
-                 "urls", "javascript", "api", "content_discovery", "intelligence"):
-        cls = {
-            "subdomains": "SubdomainModule", "dns": "DnsModule",
-            "portscan": "PortScanModule", "live_hosts": "LiveHostModule",
-            "technologies": "TechnologyModule", "urls": "UrlModule",
-            "javascript": "JavaScriptModule", "api": "ApiModule",
-            "content_discovery": "ContentModule", "intelligence": "IntelligenceModule",
-        }[name]
-        monkeypatch.setattr(f"fullrecon.modules.{name}.{cls}.run", lambda self: {})
+    for module_path in ALL_MODULE_RUN_PATHS:
+        monkeypatch.setattr(module_path, lambda self: {})
 
     code = main([
         "-d", "example.com", "--authorized", "--yes", "--no-color",
@@ -330,4 +335,5 @@ def test_cli_full_run_offline(tmp_path, monkeypatch):
         "--ports-list", "80", "--no-nmap",
     ])
     assert code == 0
-    assert (tmp_path / "example.com" / "10-Reports" / "report.html").is_file()
+    from fullrecon.config import OUTPUT_DIRS
+    assert (tmp_path / "example.com" / OUTPUT_DIRS["reports"] / "report.html").is_file()

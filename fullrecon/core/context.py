@@ -62,6 +62,13 @@ class ReconState:
     # I. technologies
     technologies: Dict[str, List[Dict[str, str]]] = field(default_factory=dict)
 
+    # K. infrastructure + defences
+    whois: Dict[str, Any] = field(default_factory=dict)
+    asns: Dict[str, Any] = field(default_factory=dict)
+    header_audits: List[Dict[str, Any]] = field(default_factory=list)
+    waf_results: List[Dict[str, Any]] = field(default_factory=list)
+    wordpress_sites: List[Dict[str, Any]] = field(default_factory=list)
+
     # J. intelligence
     findings: List[Dict[str, Any]] = field(default_factory=list)
     summary: Dict[str, Any] = field(default_factory=dict)
@@ -130,6 +137,9 @@ class ReconState:
             "js_secrets": len(self.js_secrets),
             "content_paths": len(self.content),
             "findings": len(self.findings),
+            "asns": len(self.asns),
+            "waf_hosts": sum(1 for w in self.waf_results if w.get("waf_detected")),
+            "wordpress_sites": len(self.wordpress_sites),
         }
 
     def to_dict(self) -> Dict[str, Any]:
@@ -160,6 +170,11 @@ class ReconState:
             "content_discovery": self.content,
             "interesting_files": self.interesting_files,
             "findings": self.findings,
+            "whois": self.whois,
+            "asns": self.asns,
+            "security_headers": self.header_audits,
+            "waf": self.waf_results,
+            "wordpress": self.wordpress_sites,
             "module_status": self.module_status,
             "errors": self.errors,
         }

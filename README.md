@@ -70,6 +70,11 @@ fullrecon -d example.com
 | **JavaScript analysis** | Endpoint extraction from fetch/axios/config patterns, 23 secret patterns (AWS, GCP, Stripe, GitHub, Slack, JWT, private keys…), sensitive-comment mining, config-reference discovery. **Values are redacted and never used.** |
 | **API discovery** | GraphQL endpoint probing, Swagger/OpenAPI spec detection and validation, REST route harvesting, parameter and HTTP-method extraction. |
 | **Content discovery** | Configurable wordlist, extension expansion, soft-404 baseline fingerprinting per host, 401/403 and sensitive-extension flagging. |
+| **WHOIS / RDAP** | Registrar, key dates, nameservers, domain status, contacts and abuse address via RDAP (no `whois` binary needed), with IANA bootstrap plus a built-in TLD fallback. |
+| **ASN / network mapping** | Host → IP → announcing ASN → prefixes via RIPE Stat, so you find infrastructure outside the domain tree. Uses `amass intel` when installed. |
+| **Security header audit** | Per-endpoint scoring of HSTS, CSP, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy and COOP, including CSP `unsafe-*`, HSTS `max-age=0` and version disclosure. |
+| **WAF / CDN detection** | Signature matching (Cloudflare, Akamai, AWS, Imperva, F5, Sucuri, ModSecurity, Fastly, Varnish…) plus benign behavioural probes that detect active blocking. Merges a `wafw00f` verdict when installed. |
+| **WordPress enumeration** | Only runs when WordPress is detected: version, plugins, themes, users (`/wp-json` and `?author=N`), `xmlrpc.php`, exposed config backups. Uses `wpscan` when installed; never attempts logins. |
 | **Intelligence** | Rule-based severity scoring that correlates everything above into prioritized findings with evidence. |
 
 Cross-cutting: strict scope enforcement, per-host rate limiting, configurable
@@ -135,18 +140,41 @@ pytest -q
 
 ### Optional external tools
 
-FullRecon runs with **only `dnspython`**, but these improve results:
+FullRecon runs with **only `dnspython`**. Every external binary below is detected
+at runtime and driven through an adapter that never crashes the scan; when a tool
+is missing, FullRecon uses its built-in equivalent and records the limitation.
 
 ```bash
-sudo apt-get install -y nmap curl jq
+# check what you already have
+fullrecon --check-tools
+
+# Debian/Ubuntu
+sudo apt-get install -y nmap
+
+# ProjectDiscovery / Go tools
 go install github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest
+go install github.com/projectdiscovery/katana/cmd/katana@latest
+go install github.com/projectdiscovery/dnsx/cmd/dnsx@latest
+go install github.com/tomnomnom/assetfinder@latest
+go install github.com/tomnomnom/waybackurls@latest
+go install github.com/lc/gau/v2/cmd/gau@latest
 ```
 
-| Tool | Effect if present | Effect if absent |
+| Tool | Adds | Built-in fallback |
 |---|---|---|
-| `nmap` | faster scans + service/version detection | built-in TCP connect scanner, service names from a port table |
-| `dnspython` | resolver-controlled, fast DNS | falls back to `socket.getaddrinfo`, A/AAAA only |
-| `curl` / `jq` | handy for manual follow-up | no effect on the tool |
+| `subfinder` | many extra passive sources | 9 built-in sources |
+| `assetfinder` | related domains outside the tree | — (skipped) |
+| `dnsx` | fast bulk resolution | native resolver with `dnspython` |
+| `httpx` | faster probing + tech detection | native HTTP client |
+| `katana` | JavaScript-aware crawling | regex crawler |
+| `gau` / `waybackurls` | more historical URLs | Wayback CDX + Common Crawl |
+| `ffuf` | faster, larger content discovery | native threaded scanner |
+| `nmap` | service/version detection | TCP connect scanner |
+| `wafw00f` | independent WAF verdict | built-in signatures + probes |
+| `wpscan` | plugin versions and CVEs | native WordPress checks |
+| `amass` | `intel -org` / `intel -asn` | — (skipped) |
+
+Disable all of them with `--no-external-tools` if you want pure-Python behaviour.
 
 ---
 
@@ -327,7 +355,31 @@ FullRecon-Results/
     │   ├── interesting_files.txt
     │   ├── forbidden_paths.txt         401/403 responses
     │   └── content_discovery.json
-    ├── 10-Reports/
+    ├── 10-WHOIS/
+    │   ├── whois.txt              registrar, dates, status, contacts
+    │   ├── whois.json
+    │   ├── nameservers.txt
+    │   └── contacts.txt
+    ├── 11-ASN/
+    │   ├── asn_info.txt           ASN holder + prefixes per ASN
+    │   ├── host_addresses.txt     host -> resolved IPs
+    │   ├── announced_prefixes.txt
+    │   ├── ip_asn_map.txt
+    │   └── asn.json
+    ├── 12-Headers/
+    │   ├── security_headers.txt   per-endpoint audit with rationale
+    │   ├── header_scores.txt      url <tab> score
+    │   ├── missing_by_frequency.txt
+    │   └── security_headers.json
+    ├── 13-WAF/
+    │   ├── waf_results.txt        verdict, vendor, blocked probes
+    │   ├── waf_summary.txt
+    │   └── waf.json
+    ├── 14-WordPress/
+    │   ├── wordpress.txt          version, plugins, themes, users
+    │   ├── plugins.txt / themes.txt / users.txt
+    │   └── wordpress.json
+    ├── 15-Reports/
     │   ├── summary.txt                 human-readable overview
     │   ├── report.json                 machine-readable full export
     │   ├── report.html                 standalone HTML report

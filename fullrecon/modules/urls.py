@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import quote, urlsplit
 
+from ..core import tools
 from ..core.context import ModuleContext
 from ..config import INTERESTING_KEYWORDS
 from ..utils.helpers import (
@@ -154,6 +155,43 @@ class UrlModule:
         added = self._add(urls, "commoncrawl")
         self.ctx.emit(f"  commoncrawl: {added} URL(s)")
 
+    def katana_crawl(self, seeds: List[str]) -> None:
+        """Crawl with katana when installed (parses JavaScript, unlike the built-in crawler)."""
+        cfg = self.ctx.cfg
+        if not (cfg.use_external_tools and cfg.katana_enabled and tools.tool_available("katana")):
+            return
+        for seed in seeds[:5]:
+            result = tools.katana(
+                seed,
+                depth=cfg.katana_depth,
+                js_crawl=True,
+                timeout=min(cfg.external_tool_timeout, 300.0),
+            )
+            if result.ok:
+                added = self._add(result.items, "katana")
+                self.ctx.emit(f"  katana: {added} URL(s) from {seed}")
+            else:
+                self.ctx.debug("katana failed for %s: %s", seed, result.error)
+
+    def historical_tools(self) -> None:
+        """gau / waybackurls when installed, complementing the CDX API."""
+        cfg = self.ctx.cfg
+        if not (cfg.use_external_tools and cfg.gau_enabled):
+            return
+        domain = cfg.domain
+        if tools.tool_available("gau"):
+            result = tools.gau(domain, timeout=min(cfg.external_tool_timeout, 180))
+            if result.ok:
+                added = self._add(result.items, "gau")
+                self.ctx.emit(f"  gau: {added} URL(s)")
+            else:
+                self.ctx.debug("gau failed: %s", result.error)
+        if tools.tool_available("waybackurls"):
+            result = tools.waybackurls(domain, timeout=min(cfg.external_tool_timeout, 180))
+            if result.ok:
+                added = self._add(result.items, "waybackurls")
+                self.ctx.emit(f"  waybackurls: {added} URL(s)")
+
     def robots_and_sitemaps(self, seeds: List[str]) -> None:
         """robots.txt, sitemap.xml and security.txt are cheap high-yield files."""
         for seed in seeds[:20]:
@@ -189,7 +227,10 @@ class UrlModule:
         self._add(seeds, "seed")
         self.robots_and_sitemaps(seeds)
         self.crawl(seeds)
+        self.katana_crawl(seeds)
 
+        if not cfg.passive_only:
+            self.historical_tools()
         if not cfg.passive_only and cfg.wayback_urls:
             self.wayback()
         if not cfg.passive_only and cfg.commoncrawl_urls:

@@ -72,6 +72,9 @@ class ReportGenerator:
             ("js_files", "JavaScript files"),
             ("js_secrets", "Potential JS secrets"),
             ("content_paths", "Content paths"),
+            ("asns", "Announcing ASNs"),
+            ("waf_hosts", "Hosts behind WAF/CDN"),
+            ("wordpress_sites", "WordPress sites"),
             ("findings", "Intelligence findings"),
         ):
             add(f" {label:<24}: {counts.get(key, 0)}")
@@ -222,6 +225,17 @@ class ReportGenerator:
             ("GraphQL", state.graphql_endpoints),
             ("Swagger/OpenAPI", state.swagger_endpoints),
             ("Sensitive paths", [str(f.get("url")) for f in state.interesting_files]),
+            ("WAF / CDN", [
+                f"{w['url']} - {', '.join(w.get('signatures') or ['behavioural blocking'])}"
+                for w in state.waf_results if w.get("waf_detected")
+            ]),
+            ("Security header scores", [
+                f"{h['url']} - {h.get('score')}/{h.get('max_score')}"
+                for h in state.header_audits
+            ]),
+            ("WordPress plugins", sorted({
+                slug for s in state.wordpress_sites for slug in (s.get("plugins") or [])
+            })),
         ]
         sections_html = []
         for title, items in table_sections:

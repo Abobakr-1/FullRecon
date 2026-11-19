@@ -485,6 +485,32 @@ EXTERNAL_SOURCE_HOSTS = (
     "crt.sh",
     "dns.google",
     "cloudflare-dns.com",
+    # RDAP / WHOIS registration data (whois module)
+    "data.iana.org",
+    "rdap.verisign.com",
+    "rdap.publicinterestregistry.org",
+    "rdap.identitydigital.services",
+    "rdap.nic.co",
+    "www.registry.google",
+    "rdap.nic.me",
+    "rdap.centralnic.com",
+    "rdap.nominet.uk",
+    "rdap.denic.de",
+    "rdap.nic.fr",
+    "rdap.sidn.nl",
+    "rdap.eu",
+    "rdap.ca.fury.ca",
+    "rdap.auda.org.au",
+    "rdap.jprs.jp",
+    "rdap.org",
+    # ASN / network intelligence (asn module)
+    "api.bgpview.io",
+    "bgpview.io",
+    "rdap.arin.net",
+    "whois.arin.net",
+    "stat.ripe.net",
+    "api.hackertarget.com",
+    "ipinfo.io",
 )
 
 

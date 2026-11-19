@@ -46,6 +46,8 @@ class FakeHttp:
 
 
 def make_ctx(tmp_path, domain="example.com", http=None, **cfg_kwargs):
+    # Tests must never shell out to real recon binaries (subfinder, katana, ...).
+    cfg_kwargs.setdefault("use_external_tools", False)
     cfg = Config(domain=domain, out_dir=str(tmp_path / "out"), **cfg_kwargs)
     cfg.resolved()
     scope = Scope(

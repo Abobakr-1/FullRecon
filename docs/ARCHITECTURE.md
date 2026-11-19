@@ -10,22 +10,50 @@ nothing is fetched twice.
 flowchart TD
     T[target validation] --> SD[subdomains]
     SD --> DNS[dns]
+    DNS --> WHOIS[whois]
+    DNS --> ASN[asn]
     DNS --> PORTS[ports]
     DNS --> LIVE[live hosts]
     PORTS --> LIVE
     LIVE --> TECH[technologies]
+    LIVE --> HDR[headers]
+    LIVE --> WAF[waf]
     LIVE --> URLS[urls]
     URLS --> JS[javascript]
     URLS --> API[api]
     LIVE --> API
     LIVE --> CONTENT[content discovery]
+    LIVE --> WP[wordpress]
     JS --> API
-    TECH --> INTEL[intelligence]
+    WHOIS --> INTEL[intelligence]
+    ASN --> INTEL
+    TECH --> INTEL
+    HDR --> INTEL
+    WAF --> INTEL
     JS --> INTEL
     API --> INTEL
     CONTENT --> INTEL
+    WP --> INTEL
     INTEL --> REPORTS["summary.txt / report.json / report.html"]
 ```
+
+## External tool layer
+
+`core/tools.py` wraps every optional binary behind one contract:
+
+```python
+result = tools.subfinder(domain)
+if result.ok:          # parsed items available
+    use(result.items)
+else:                  # missing binary, timeout, or non-zero exit
+    fall_back_to_native()
+```
+
+`ToolResult` records `available`, `ok`, `items`, `error`, `skipped_reason` and
+`duration`, so the report can state exactly which coverage came from which tool.
+Adapters never raise; a broken binary degrades to the built-in implementation.
+Binaries are resolved through `PATH` (never `./tool`) to avoid executing
+attacker-planted files in a scan directory.
 
 ## Core objects
 

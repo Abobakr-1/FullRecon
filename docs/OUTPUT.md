@@ -109,7 +109,56 @@ FullRecon never stores a usable credential and never sends one anywhere.
 | `forbidden_paths.txt` | `url (status)` | 401/403 only: access-controlled but present. |
 | `content_discovery.json` | JSON | Full records plus the baseline fingerprints used. |
 
-## 10-Reports
+## 10-WHOIS
+
+| File | Format | Contents |
+|---|---|---|
+| `whois.txt` | aligned | Handle, registrar, abuse contact, registrant org/country, DNSSEC, key dates, nameservers, status, contacts. |
+| `whois.json` | JSON | Full flattened RDAP record, including the source URL. |
+| `nameservers.txt` | one per line | Authoritative nameservers. |
+| `contacts.txt` | `roles` TAB `name` TAB `email` | Flattened RDAP entities. |
+
+## 11-ASN
+
+| File | Format | Contents |
+|---|---|---|
+| `asn_info.txt` | grouped | `AS<number> <holder>` with its prefixes and addresses. |
+| `host_addresses.txt` | `host` TAB `ips` | Every host mapped to its public addresses. |
+| `announced_prefixes.txt` | CIDRs | Prefixes announced by the target's ASN(s). |
+| `ip_asn_map.txt` | `ip` TAB `AS` TAB `holder` TAB `prefix` | Per-address lookup result. |
+| `amass_related_domains.txt` | hostnames | Only when `amass intel -org` ran. |
+| `asn.json` | JSON | All of the above. |
+
+## 12-Headers
+
+| File | Format | Contents |
+|---|---|---|
+| `security_headers.txt` | per endpoint | Score, present headers, missing headers with rationale, weaknesses, disclosures. |
+| `header_scores.txt` | `url` TAB `score/max` TAB `missing` TAB `weaknesses` | One line per endpoint. |
+| `missing_by_frequency.txt` | `count` `header` | Which headers are missing most often. |
+| `security_headers.json` | JSON | Full audit records. |
+
+## 13-WAF
+
+| File | Format | Contents |
+|---|---|---|
+| `waf_results.txt` | per host | Verdict, matched vendor, server header, blocked probes, `wafw00f` verdict. |
+| `waf_summary.txt` | `url` TAB `yes/no` TAB `vendors` TAB `blocked` | Compact table. |
+| `waf.json` | JSON | Full details including probe responses. |
+
+## 14-WordPress
+
+| File | Contents |
+|---|---|
+| `wordpress.txt` | Version, evidence, xmlrpc state, plugins, themes, users, exposed files. |
+| `plugins.txt` / `themes.txt` | One slug per line. |
+| `users.txt` | `url` TAB `username`. |
+| `wordpress.json` | Full records, including the REST API and author-enumeration evidence. |
+
+This directory stays empty when no endpoint looks like WordPress — that is the
+correct result, not a failure.
+
+## 15-Reports
 
 | File | Contents |
 |---|---|

@@ -28,7 +28,12 @@ OUTPUT_DIRS = {
     "api": "07-API",
     "javascript": "08-JavaScript",
     "content": "09-Content-Discovery",
-    "reports": "10-Reports",
+    "whois": "10-WHOIS",
+    "asn": "11-ASN",
+    "headers": "12-Headers",
+    "waf": "13-WAF",
+    "wordpress": "14-WordPress",
+    "reports": "15-Reports",
     "logs": "logs",
     "raw": "raw",
 }
@@ -146,6 +151,26 @@ class Config:
 
     # ---- scope -------------------------------------------------------------
     scope: Dict[str, Any] = field(default_factory=dict)
+
+    # ---- external tool integrations ------------------------------------------
+    use_external_tools: bool = True        # drive subfinder/katana/gau/... if present
+    subfinder_enabled: bool = True
+    assetfinder_enabled: bool = True
+    katana_enabled: bool = True
+    gau_enabled: bool = True
+    httpx_enabled: bool = False            # httpx replaces native probing; opt-in
+    ffuf_enabled: bool = False             # ffuf replaces native content discovery
+    katana_depth: int = 3
+    external_tool_timeout: float = 240.0
+
+    # ---- waf -----------------------------------------------------------------
+    waf_probes: bool = True                # send benign blocking probes
+    # ---- wordpress ------------------------------------------------------------
+    wordpress_enabled: bool = True
+    # ---- whois ----------------------------------------------------------------
+    whois_enabled: bool = True
+    # ---- asn -------------------------------------------------------------------
+    asn_enabled: bool = True
 
     # ---- reporting ----------------------------------------------------------
     report_title: str = "FullRecon Report"

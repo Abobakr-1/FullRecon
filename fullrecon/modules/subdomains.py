@@ -15,6 +15,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Callable, Dict, Iterable, List, Optional, Set, Tuple
 from urllib.parse import quote
 
+from ..core import tools
 from ..core.context import ModuleContext
 from ..utils.helpers import dedupe, read_lines
 from ..utils.validators import in_domain, is_ip, is_valid_hostname, normalise_target
@@ -296,6 +297,11 @@ class SubdomainModule:
                 else:
                     ctx.emit(f"  {name:<16} {'-':>5} (no data)")
 
+        # External binaries: subfinder and assetfinder add sources FullRecon's
+        # built-in list does not cover. Each failure is isolated and reported.
+        if cfg.use_external_tools:
+            per_source.update(self._external_sources(domain))
+
         # Optional brute force from a wordlist.
         if cfg.subdomain_bruteforce and cfg.subdomain_wordlist:
             brute = self._bruteforce(domain, cfg.subdomain_wordlist)
@@ -342,6 +348,31 @@ class SubdomainModule:
         }
 
     # ------------------------------------------------------------------
+    def _external_sources(self, domain: str) -> Dict[str, List[str]]:
+        """Run configured external enumerators; return source -> hostnames."""
+        found: Dict[str, List[str]] = {}
+        timeout = min(self.ctx.cfg.external_tool_timeout, 240.0)
+
+        if self.ctx.cfg.subfinder_enabled and tools.tool_available("subfinder"):
+            result = tools.subfinder(domain, all_sources=True, timeout=timeout)
+            if result.ok:
+                names = self._normalise(result.items, domain)
+                found["subfinder"] = names
+                self.ctx.emit(f"  {'subfinder':<16} {len(names):>5} hostnames")
+            else:
+                self.ctx.debug("subfinder failed: %s", result.error)
+                self.state.errors.append(f"subdomains/subfinder: {result.error}")
+
+        if self.ctx.cfg.assetfinder_enabled and tools.tool_available("assetfinder"):
+            result = tools.assetfinder(domain, timeout=min(timeout, 120))
+            if result.ok:
+                names = self._normalise(result.items, domain)
+                found["assetfinder"] = names
+                self.ctx.emit(f"  {'assetfinder':<16} {len(names):>5} hostnames")
+            else:
+                self.ctx.debug("assetfinder failed: %s", result.error)
+        return found
+
     def _guarded(self, name: str, domain: str) -> Tuple[List[str], str]:
         try:
             return self.source_map[name](domain), ""

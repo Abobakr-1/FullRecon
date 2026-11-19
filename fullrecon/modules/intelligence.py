@@ -67,6 +67,10 @@ class IntelligenceModule:
         self._sensitive_files()
         self._technology_notes()
         self._dns_hygiene()
+        self._waf_and_cdn()
+        self._security_headers()
+        self._wordpress_findings()
+        self._infrastructure()
 
         self._prioritise()
         self.state.findings = self.findings
@@ -384,6 +388,233 @@ class IntelligenceModule:
                     "DMARC is required by many programs and mail providers; its "
                     "absence weakens anti-spoofing posture.",
                 )
+
+    def _waf_and_cdn(self) -> None:
+        """Report observed WAF/CDN layers as context, never as safety."""
+        waf_results = (self.state.summary or {}).get("waf") or []
+        if not waf_results:
+            return
+
+        behind = [r for r in waf_results if r.get("waf_detected")]
+        unprotected = [r for r in waf_results if not r.get("waf_detected")]
+
+        if behind:
+            names = sorted({n for r in behind for n in r.get("signatures", [])})
+            self._add(
+                "Defences",
+                f"{len(behind)} host(s) behind a WAF/CDN",
+                INFO,
+                "Blocking layers observed while probing. Their presence does not "
+                "mean the application is secure; test the origin where authorized.",
+                [
+                    f"{r['url']}: {', '.join(r.get('signatures') or ['behavioural blocking'])}"
+                    for r in behind
+                ][:20],
+            )
+            if names:
+                self._add(
+                    "Defences",
+                    f"WAF/CDN vendor(s): {', '.join(names[:6])}",
+                    INFO,
+                    "The vendor narrows which bypass techniques are worth reviewing "
+                    "and whether the origin is directly reachable.",
+                    names,
+                )
+
+        if unprotected:
+            self._add(
+                "Defences",
+                f"{len(unprotected)} host(s) showed no WAF/CDN signature",
+                INFO,
+                "No blocking layer was observed. That is an observation about "
+                "probing, not a confirmed absence of protection.",
+                [r["url"] for r in unprotected][:20],
+            )
+
+    def _security_headers(self) -> None:
+        """Summarise the header audit at hardening severity, not as findings."""
+        audits = (self.state.summary or {}).get("headers") or []
+        if not audits:
+            return
+
+        missing_hsts = [
+            a["url"] for a in audits
+            if a.get("scheme") == "https"
+            and any(m["header"] == "strict-transport-security" for m in a["missing"])
+        ]
+        if missing_hsts:
+            self._add(
+                "Headers",
+                f"HSTS missing on {len(missing_hsts)} HTTPS endpoint(s)",
+                LOW,
+                "Without HSTS the first request can be downgraded to plain HTTP, "
+                "exposing cookies and tokens. Hardening issue, not a vulnerability "
+                "on its own.",
+                missing_hsts[:20],
+                "https://owasp.org/www-project-secure-headers/",
+            )
+
+        unsafe_csp = [
+            a["url"] for a in audits
+            if any("unsafe-inline" in w or "unsafe-eval" in w
+                   for w in a.get("weaknesses", []))
+        ]
+        if unsafe_csp:
+            self._add(
+                "Headers",
+                f"CSP weakened by unsafe directives on {len(unsafe_csp)} endpoint(s)",
+                LOW,
+                "unsafe-inline/unsafe-eval reduce CSP to a weak defence against XSS. "
+                "Confirm with an actual injection test before treating it as impact.",
+                unsafe_csp[:20],
+            )
+
+        worst = sorted(audits, key=lambda a: a.get("score", 0))[:5]
+        if worst:
+            self._add(
+                "Headers",
+                "Security header posture summary",
+                INFO,
+                "Lowest-scoring endpoints first. Missing headers are hardening gaps "
+                "and are only reportable with demonstrated impact.",
+                [
+                    "{url} scored {score}/{max_score} ({missing} missing)".format(
+                        url=a["url"], score=a.get("score", 0),
+                        max_score=a.get("max_score", 0),
+                        missing=len(a.get("missing", [])),
+                    )
+                    for a in worst
+                ],
+            )
+
+        disclosures: Dict[str, Set[str]] = {}
+        for audit in audits:
+            for header, value in (audit.get("disclosures") or {}).items():
+                if header in ("server", "x-powered-by", "x-aspnet-version", "x-backend-server"):
+                    disclosures.setdefault(header, set()).add(str(value))
+        if disclosures:
+            self._add(
+                "Headers",
+                "Technology/version disclosure via headers",
+                LOW,
+                "Banners help an attacker target known CVEs; only a finding when a "
+                "specific vulnerable version is confirmed.",
+                [f"{h}: {', '.join(sorted(v))[:160]}" for h, v in disclosures.items()],
+            )
+
+    def _wordpress_findings(self) -> None:
+        """WordPress enumeration results, severity matched to real impact."""
+        sites = (self.state.summary or {}).get("wordpress") or []
+        if not sites:
+            return
+
+        versioned = [(s["url"], s.get("version")) for s in sites if s.get("version")]
+        if versioned:
+            self._add(
+                "WordPress",
+                f"WordPress version disclosed on {len(versioned)} site(s)",
+                LOW,
+                "The version pinpoints which plugin/core CVEs apply. Verify whether "
+                "the version is actually vulnerable before reporting.",
+                [f"{url}: WordPress {ver}" for url, ver in versioned],
+            )
+
+        user_enum = [s for s in sites if s.get("users")]
+        if user_enum:
+            self._add(
+                "WordPress",
+                f"User enumeration possible on {len(user_enum)} site(s)",
+                LOW,
+                "Valid usernames enable targeted password attacks. Enumeration alone "
+                "is usually informational; pair it with a real auth weakness to report.",
+                [f"{s['url']}: {', '.join(s['users'][:10])}" for s in user_enum],
+            )
+
+        xmlrpc = [s["url"] for s in sites if s.get("xmlrpc")]
+        if xmlrpc:
+            self._add(
+                "WordPress",
+                f"xmlrpc.php enabled on {len(xmlrpc)} site(s)",
+                LOW,
+                "xmlrpc enables amplified brute-force and pingback abuse. Only "
+                "reportable with demonstrated abuse beyond rate limits.",
+                xmlrpc,
+            )
+
+        backups = [
+            (s["url"], path) for s in sites for path in (s.get("wp_config_backups") or [])
+        ]
+        if backups:
+            self._add(
+                "WordPress",
+                "Exposed WordPress configuration file(s)",
+                HIGH,
+                "A readable wp-config backup leaks database credentials and salts. "
+                "Confirm the response actually contains credentials before reporting.",
+                [f"{url}{path}" for url, path in backups],
+            )
+
+        plugins = sorted({slug for s in sites for slug in (s.get("plugins") or [])})
+        if plugins:
+            self._add(
+                "WordPress",
+                f"{len(plugins)} WordPress plugin(s) identified",
+                INFO,
+                "Plugin slugs map to known CVEs. Check each version against public "
+                "advisories before claiming vulnerability.",
+                plugins[:40],
+            )
+
+    def _infrastructure(self) -> None:
+        """Registration and ASN context from the whois and asn modules."""
+        whois = (self.state.summary or {}).get("whois") or {}
+        if whois and not whois.get("error"):
+            details = []
+            if whois.get("registrar"):
+                details.append(f"registrar: {whois['registrar']}")
+            events = whois.get("events") or {}
+            if events.get("registration"):
+                details.append(f"registered: {events['registration'][:10]}")
+            if events.get("expiration"):
+                details.append(f"expires: {events['expiration'][:10]}")
+            if whois.get("registrant_org"):
+                details.append(f"org: {whois['registrant_org']}")
+            if details:
+                self._add(
+                    "Infrastructure",
+                    "Domain registration profile",
+                    INFO,
+                    "Ownership and age context. A recently transferred domain is "
+                    "worth checking for dangling records.",
+                    details,
+                )
+            if not whois.get("dnssec_signed"):
+                self._add(
+                    "Infrastructure",
+                    "DNSSEC is not enabled",
+                    INFO,
+                    "Without DNSSEC, DNS answers can be spoofed. Most programs treat "
+                    "this as informational.",
+                    [f"domain: {whois.get('domain')}"],
+                )
+
+        asn_data = (self.state.summary or {}).get("asn") or {}
+        asns = asn_data.get("asns") or {}
+        if asns:
+            entries = []
+            for asn, info in list(asns.items())[:10]:
+                entries.append(
+                    f"AS{asn} {info.get('holder', '')} "
+                    f"({len(info.get('prefixes', []))} prefix(es))"
+                )
+            self._add(
+                "Infrastructure",
+                f"{len(asns)} announcing ASN(s) identified",
+                INFO,
+                "Shared hosting or cloud ranges can contain sibling assets outside "
+                "the domain tree. Only test them if the program's scope allows.",
+                entries,
+            )
 
     # ------------------------------------------------------------------
     def _prioritise(self) -> None:

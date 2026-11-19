@@ -19,8 +19,10 @@ from .scanner import HttpClient
 from .scope import Scope
 
 from ..modules.api import ApiModule
+from ..modules.asn import AsnModule
 from ..modules.content_discovery import ContentModule
 from ..modules.dns import DnsModule
+from ..modules.headers import HeadersModule
 from ..modules.intelligence import IntelligenceModule
 from ..modules.javascript import JavaScriptModule
 from ..modules.live_hosts import LiveHostModule
@@ -28,6 +30,9 @@ from ..modules.portscan import PortScanModule
 from ..modules.subdomains import SubdomainModule
 from ..modules.technologies import TechnologyModule
 from ..modules.urls import UrlModule
+from ..modules.waf import WafModule
+from ..modules.whois import WhoisModule
+from ..modules.wordpress import WordPressModule
 
 
 # (key, module class, allowed in --passive mode, sends traffic to the target)
@@ -36,13 +41,18 @@ from ..modules.urls import UrlModule
 PIPELINE: List[tuple] = [
     ("subdomains", SubdomainModule, True, False),
     ("dns", DnsModule, True, True),
+    ("whois", WhoisModule, True, False),
+    ("asn", AsnModule, True, False),
     ("ports", PortScanModule, False, True),
     ("live", LiveHostModule, False, True),
     ("technologies", TechnologyModule, False, True),
+    ("headers", HeadersModule, False, True),
+    ("waf", WafModule, False, True),
     ("urls", UrlModule, False, True),
     ("javascript", JavaScriptModule, False, True),
     ("api", ApiModule, False, True),
     ("content", ContentModule, False, True),
+    ("wordpress", WordPressModule, False, True),
     ("intel", IntelligenceModule, True, False),
 ]
 
@@ -51,13 +61,24 @@ ALL_MODULES = [key for key, *_ in PIPELINE]
 # Convenience groupings used by the CLI flags.
 MODULE_GROUPS = {
     "full": ALL_MODULES,
-    "default": ["subdomains", "dns", "ports", "live", "technologies", "urls", "javascript", "api", "content", "intel"],
-    "passive": ["subdomains", "dns", "intel"],
-    "active": ["ports", "live", "technologies", "urls", "javascript", "api", "content", "intel"],
+    "default": [
+        "subdomains", "dns", "whois", "asn", "ports", "live", "technologies",
+        "headers", "waf", "urls", "javascript", "api", "content", "wordpress", "intel",
+    ],
+    "passive": ["subdomains", "dns", "whois", "asn", "intel"],
+    "active": [
+        "ports", "live", "technologies", "headers", "waf", "urls",
+        "javascript", "api", "content", "wordpress", "intel",
+    ],
     "subdomains": ["subdomains"],
     "ports": ["ports"],
     "api": ["api"],
     "js": ["javascript"],
+    "whois": ["whois"],
+    "asn": ["asn"],
+    "headers": ["headers"],
+    "waf": ["waf"],
+    "wordpress": ["wordpress"],
 }
 
 

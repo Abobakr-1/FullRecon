@@ -72,6 +72,16 @@ def build_parser() -> argparse.ArgumentParser:
     single.add_argument("--js", action="store_true", help="JavaScript analysis only")
     single.add_argument("--content", action="store_true", help="content discovery only")
     single.add_argument("--tech", action="store_true", help="technology detection only")
+    single.add_argument("--whois-only", dest="whois_only", action="store_true",
+                        help="WHOIS/RDAP lookup only")
+    single.add_argument("--asn-only", dest="asn_only", action="store_true",
+                        help="ASN / network mapping only")
+    single.add_argument("--headers-only", dest="headers_only", action="store_true",
+                        help="security header audit only")
+    single.add_argument("--waf-only", dest="waf_only", action="store_true",
+                        help="WAF/CDN detection only")
+    single.add_argument("--wp", dest="wordpress_only", action="store_true",
+                        help="WordPress enumeration only")
 
     perf = parser.add_argument_group("performance")
     perf.add_argument("-t", "--threads", type=int, metavar="N", default=None,
@@ -115,6 +125,20 @@ def build_parser() -> argparse.ArgumentParser:
                            "rapiddns,otx,wayback,commoncrawl,anubis)")
     scan.add_argument("--verify-tls", action="store_true",
                       help="require valid TLS certificates (off by default for recon)")
+
+    ext = parser.add_argument_group("external tools")
+    ext.add_argument("--no-external-tools", action="store_true",
+                     help="never call external binaries, use only built-in logic")
+    ext.add_argument("--external-timeout", type=float, metavar="SEC", default=None,
+                     help="timeout for each external tool call (default: 240)")
+    ext.add_argument("--ffuf", action="store_true",
+                     help="use ffuf for content discovery when installed")
+    ext.add_argument("--no-waf-probes", action="store_true",
+                     help="fingerprint WAFs by signature only, send no probe requests")
+    ext.add_argument("--check-tools", action="store_true",
+                     help="report which external recon tools are installed, then exit")
+    ext.add_argument("--org", metavar="NAME", default=None,
+                     help="organisation name for amass intel -org lookup")
 
     scope = parser.add_argument_group("scope control")
     scope.add_argument("--scope-file", metavar="FILE", default=None,
@@ -198,11 +222,19 @@ def selected_modules(args: argparse.Namespace) -> Optional[List[str]]:
         "javascript": args.js,
         "content": args.content,
         "technologies": args.tech,
+        "whois": args.whois_only,
+        "asn": args.asn_only,
+        "headers": args.headers_only,
+        "waf": args.waf_only,
+        "wordpress": args.wordpress_only,
     }
     picked = [name for name, flag in single.items() if flag]
     if picked:
         # A single-module run still needs DNS/subdomain inputs where relevant.
-        requires_hosts = {"live", "urls", "api", "javascript", "content", "technologies", "ports"}
+        requires_hosts = {
+            "live", "urls", "api", "javascript", "content", "technologies",
+            "ports", "headers", "waf", "wordpress",
+        }
         if any(p in requires_hosts for p in picked) and "subdomains" not in picked:
             picked = ["subdomains", "dns"] + picked
         return picked
@@ -274,6 +306,18 @@ def build_config(args: argparse.Namespace) -> Config:
         cfg.commoncrawl_urls = False
     if args.no_content:
         cfg.content_discovery = False
+    if args.no_external_tools:
+        cfg.use_external_tools = False
+    if args.external_timeout is not None:
+        cfg.external_tool_timeout = max(10.0, args.external_timeout)
+    if args.ffuf:
+        cfg.ffuf_enabled = True
+    if args.no_waf_probes:
+        cfg.waf_probes = False
+    if args.org:
+        org_scope = dict(cfg.scope or {})
+        org_scope["organization"] = args.org
+        cfg.scope = org_scope
     if args.crawl_depth is not None:
         cfg.crawl_depth = max(0, args.crawl_depth)
     if args.max_pages is not None:
@@ -312,6 +356,33 @@ def build_config(args: argparse.Namespace) -> Config:
 # ---------------------------------------------------------------------------
 # entrypoint
 # ---------------------------------------------------------------------------
+
+
+def _print_tools() -> None:
+    """Report which external recon tools are installed."""
+    from .core import tools as toolmod
+
+    report = toolmod.summary()
+    installed = report["installed"]
+    missing = report["missing"]
+    registry = report["registry"]
+
+    print()
+    print(Colors.bold("External recon tools"))
+    print()
+    if installed:
+        print(Colors.ok("  installed:"))
+        for name in sorted(installed):
+            print(f"    {Colors.green('+')} {name:<14} {Colors.grey(registry.get(name, ''))}")
+    if missing:
+        print()
+        print(Colors.warn("  not installed (optional):"))
+        for name in sorted(missing):
+            print(f"    {Colors.grey('-')} {name:<14} {Colors.grey(registry.get(name, ''))}")
+    print()
+    print(Colors.grey("  FullRecon works without any of these; each unlocks extra coverage."))
+    print(Colors.grey("  Install: go install github.com/projectdiscovery/<tool>/v2/cmd/<tool>@latest"))
+    print()
 
 
 def _print_modules() -> None:
@@ -355,6 +426,10 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     if args.list_modules:
         _print_modules()
+        return 0
+
+    if args.check_tools:
+        _print_tools()
         return 0
 
     if not args.domain:
